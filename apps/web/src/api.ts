@@ -96,4 +96,90 @@ export const api = {
         timestamp: number;
       }>
     >(`/api/whatsapp/messages${phone ? `?phone=${encodeURIComponent(phone)}` : ''}`),
+  getHedging: () =>
+    request<{
+      mode: 'LIVE' | 'SHADOW';
+      residuals: { goldGrams: number; silverGrams: number };
+      executions: Array<{
+        id: string;
+        metal: string;
+        contract: string;
+        side: string;
+        lots: number;
+        grams: number;
+        mcxPrice: number;
+        mode: string;
+        slippageSavedInr: number;
+        createdAt: number;
+      }>;
+    }>('/api/hedging'),
+  setHedgingMode: (mode: 'LIVE' | 'SHADOW') =>
+    request<{ mode: 'LIVE' | 'SHADOW' }>('/api/hedging/mode', {
+      method: 'POST',
+      body: JSON.stringify({ mode }),
+    }),
+  getSpreadStatus: () =>
+    request<{
+      goldVaultGrams: number;
+      silverVaultKg: number;
+      velocityCount5s: number;
+      toxicFlowAlert: boolean;
+      recommendedSilverAskSkewInr: number;
+      recommendedGoldAskSkewInr: number;
+    }>('/api/risk/spread-status'),
+  getUnfixedPositions: () =>
+    request<
+      Array<{
+        id: string;
+        clientId: string;
+        clientName: string;
+        metal: 'GOLD' | 'SILVER';
+        grams: number;
+        entryRatePerUnit: number;
+        marginDepositedInr: number;
+        currentRatePerUnit: number;
+        mtmLossInr: number;
+        marginUtilizationPct: number;
+        riskStatus: 'HEALTHY' | 'WARNING' | 'MARGIN_CALL';
+        status: 'OPEN' | 'LIQUIDATED';
+      }>
+    >('/api/risk/unfixed'),
+  createUnfixedPosition: (payload: {
+    clientId: string;
+    metal: 'GOLD' | 'SILVER';
+    grams: number;
+    entryRatePerUnit: number;
+    marginDepositedInr: number;
+  }) => request('/api/risk/unfixed', { method: 'POST', body: JSON.stringify(payload) }),
+  liquidateUnfixedPosition: (id: string) =>
+    request(`/api/risk/unfixed/${id}/liquidate`, { method: 'POST' }),
+  getRtgsVerifications: () =>
+    request<
+      Array<{
+        id: string;
+        clientId: string;
+        remitterName: string;
+        expectedLegalName: string;
+        amountInr: number;
+        utrNumber: string;
+        status: 'VERIFIED' | 'BLOCKED_NAME_MISMATCH';
+        deliveryToken: string | null;
+        barSerial: string | null;
+        measuredGrams: number | null;
+        ewayBillNo: string | null;
+      }>
+    >('/api/compliance/rtgs'),
+  verifyRtgs: (payload: {
+    clientId: string;
+    remitterName: string;
+    amountInr: number;
+    utrNumber: string;
+    barSerial?: string;
+    measuredGrams?: number;
+  }) =>
+    request<{
+      status: 'VERIFIED' | 'BLOCKED_NAME_MISMATCH';
+      deliveryToken: string | null;
+      ewayBillNo: string | null;
+    }>('/api/compliance/rtgs/verify', { method: 'POST', body: JSON.stringify(payload) }),
 };

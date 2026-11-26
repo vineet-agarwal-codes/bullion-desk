@@ -68,6 +68,47 @@ export function initDatabase(dbPath: string = './bullion-desk.db'): Database.Dat
       confirmed_at INTEGER,
       created_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS hedge_executions (
+      id TEXT PRIMARY KEY,
+      metal TEXT NOT NULL,
+      contract TEXT NOT NULL,
+      side TEXT NOT NULL,
+      lots INTEGER NOT NULL,
+      grams REAL NOT NULL,
+      mcx_price REAL NOT NULL,
+      mode TEXT NOT NULL,
+      slippage_saved_inr REAL NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS unfixed_positions (
+      id TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL REFERENCES clients(id),
+      client_name TEXT NOT NULL,
+      metal TEXT NOT NULL,
+      grams REAL NOT NULL,
+      entry_rate_per_unit REAL NOT NULL,
+      margin_deposited_inr REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT 'OPEN',
+      created_at INTEGER NOT NULL,
+      closed_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS rtgs_verifications (
+      id TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL REFERENCES clients(id),
+      remitter_name TEXT NOT NULL,
+      expected_legal_name TEXT NOT NULL,
+      amount_inr REAL NOT NULL,
+      utr_number TEXT NOT NULL,
+      status TEXT NOT NULL,
+      delivery_token TEXT,
+      bar_serial TEXT,
+      measured_grams REAL,
+      eway_bill_no TEXT,
+      created_at INTEGER NOT NULL
+    );
   `);
 
   seedInitialData(db);
@@ -82,6 +123,9 @@ function seedInitialData(db: Database.Database) {
     db.prepare('INSERT INTO market_settings (key, value) VALUES (?, ?)').run('is_frozen', '0');
     db.prepare('INSERT INTO market_settings (key, value) VALUES (?, ?)').run('freeze_reason', '');
     db.prepare('INSERT INTO market_settings (key, value) VALUES (?, ?)').run('next_deal_number', '4001');
+    db.prepare('INSERT INTO market_settings (key, value) VALUES (?, ?)').run('hedge_mode', 'LIVE');
+    db.prepare('INSERT INTO market_settings (key, value) VALUES (?, ?)').run('gold_vault_grams', '4500');
+    db.prepare('INSERT INTO market_settings (key, value) VALUES (?, ?)').run('silver_vault_kg', '240');
   }
 
   const scripCount = (db.prepare('SELECT COUNT(*) as c FROM scrips').get() as { c: number }).c;

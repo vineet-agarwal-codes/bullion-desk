@@ -13,6 +13,8 @@ import { McxFeedService } from './feed.js';
 import { MarketService } from './marketService.js';
 import { AiCommandService } from './aiCommandService.js';
 import { WhatsAppAgentService } from './whatsappService.js';
+import { HedgingService } from './hedgingService.js';
+import { RiskAndComplianceService } from './riskService.js';
 
 export interface AppOptions {
   dbPath?: string;
@@ -35,6 +37,8 @@ export async function createApp(options: AppOptions = {}): Promise<{
   const market = new MarketService(db, feed);
   const aiCommand = new AiCommandService(market);
   const whatsapp = new WhatsAppAgentService(market, aiCommand);
+  const hedging = new HedgingService(db);
+  const risk = new RiskAndComplianceService(db, market);
 
   const wsClients = new Set<{ socket: { send: (data: string) => void; readyState: number }; group: 'GROUP_A' | 'GROUP_B' | 'PUBLIC' }>();
 
@@ -56,6 +60,10 @@ export async function createApp(options: AppOptions = {}): Promise<{
   });
 
   market.subscribeOrders((order) => {
+    if (order.status === 'CONFIRMED') {
+      risk.recordOrderVelocity();
+      hedging.onOrderConfirmed(order, feed.getTick());
+    }
     const msg: WsServerMessage = {
       type: 'ORDER_EVENT',
       payload: order,
@@ -296,6 +304,68 @@ export async function createApp(options: AppOptions = {}): Promise<{
   app.get('/api/whatsapp/messages', async (req) => {
     const query = req.query as { phone?: string };
     return whatsapp.getMessages(query.phone);
+  });
+
+  // v0.4.0: Auto-Hedging, Dynamic Spread, Badla MTM Risk & RTGS Fraud Shield
+  app.get('/api/hedging', async () => ({
+    mode: hedging.getMode(),
+    residuals: hedging.getResiduals(),
+    executions: hedging.listExecutions(),
+  }));
+
+  app.post('/api/hedging/mode', async (req) => {
+    const body = z.object({ mode: z.enum(['LIVE', 'SHADOW']) }).parse(req.body);
+    return { mode: hedging.setMode(body.mode) };
+  });
+
+  app.get('/api/risk/spread-status', async () => risk.getDynamicSpreadStatus());
+
+  app.get('/api/risk/unfixed', async () => risk.listUnfixedPositions());
+
+  app.post('/api/risk/unfixed', async (req, reply) => {
+    const schema = z.object({
+      clientId: z.string().min(1),
+      metal: z.enum(['GOLD', 'SILVER']),
+      grams: z.number().positive(),
+      entryRatePerUnit: z.number().positive(),
+      marginDepositedInr: z.number().positive(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
+    try {
+      return reply.status(201).send(risk.createUnfixedPosition(parsed.data));
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/api/risk/unfixed/:id/liquidate', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    try {
+      return risk.liquidateUnfixedPosition(id);
+    } catch (err) {
+      return reply.status(404).send({ error: (err as Error).message });
+    }
+  });
+
+  app.get('/api/compliance/rtgs', async () => risk.listRtgsVerifications());
+
+  app.post('/api/compliance/rtgs/verify', async (req, reply) => {
+    const schema = z.object({
+      clientId: z.string().min(1),
+      remitterName: z.string().min(1),
+      amountInr: z.number().positive(),
+      utrNumber: z.string().min(4),
+      barSerial: z.string().optional(),
+      measuredGrams: z.number().positive().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
+    try {
+      return reply.status(201).send(risk.verifyRtgsAndIssueToken(parsed.data));
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
   });
 
   app.addHook('onClose', async () => {

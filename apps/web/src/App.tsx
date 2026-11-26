@@ -6,15 +6,16 @@ import type {
   ScripConfig,
   WsServerMessage,
 } from '@bullion-desk/shared';
-import { Crown, LayoutDashboard, MessageCircle, Store } from 'lucide-react';
+import { Crown, LayoutDashboard, MessageCircle, ShieldCheck, Store } from 'lucide-react';
 import { api, WS_BASE } from './api';
 import { ClientBoard } from './components/ClientBoard';
 import { DealerDesk } from './components/DealerDesk';
+import { RiskHedgeSuite } from './components/RiskHedgeSuite';
 import { TickerStrip } from './components/TickerStrip';
 import { WhatsAppSimulator } from './components/WhatsAppSimulator';
 
 export function App() {
-  const [view, setView] = useState<'CLIENT' | 'DEALER' | 'WHATSAPP'>('CLIENT');
+  const [view, setView] = useState<'CLIENT' | 'DEALER' | 'WHATSAPP' | 'RISK'>('CLIENT');
   const [market, setMarket] = useState<MarketState | null>(null);
   const [scrips, setScrips] = useState<ScripConfig[]>([]);
   const [clients, setClients] = useState<ClientProfile[]>([]);
@@ -117,6 +118,18 @@ export function App() {
               <MessageCircle className="h-3.5 w-3.5" />
               WhatsApp Agents
             </button>
+            <button
+              data-testid="nav-risk-suite"
+              onClick={() => setView('RISK')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                view === 'RISK'
+                  ? 'bg-sky-500 text-slate-950'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Hedge & Risk Suite
+            </button>
           </nav>
         </div>
       </header>
@@ -152,6 +165,9 @@ export function App() {
         )}
         {view === 'WHATSAPP' && (
           <WhatsAppSimulator clients={clients} onOrderOrRateChanged={loadAll} />
+        )}
+        {view === 'RISK' && (
+          <RiskHedgeSuite clients={clients} tick={market?.tick ?? null} />
         )}
       </main>
     </div>
