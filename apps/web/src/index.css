@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+@keyframes tickUp {
+  0% { background-color: rgba(16, 185, 129, 0.35); }
+  100% { background-color: transparent; }
+}
+
+@keyframes tickDown {
+  0% { background-color: rgba(244, 63, 94, 0.35); }
+  100% { background-color: transparent; }
+}
+
+.flash-up {
+  animation: tickUp 0.7s ease-out;
+}
+
+.flash-down {
+  animation: tickDown 0.7s ease-out;
+}
