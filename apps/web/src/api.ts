@@ -62,4 +62,22 @@ export const api = {
         totalTurnoverInr: number;
       }>
     >('/api/positions'),
+  sendAiCommand: (payload: {
+    text: string;
+    sessionId: string;
+    role: 'DEALER' | 'CLIENT';
+    clientId?: string;
+    autoExecute?: boolean;
+  }) =>
+    request<{
+      parsed: {
+        intent: string;
+        confidence: number;
+        explanation: string;
+        usedContext: boolean;
+      };
+      executed: boolean;
+      message: string;
+      order?: Order;
+    }>('/api/ai/command', { method: 'POST', body: JSON.stringify(payload) }),
 };

@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { initDatabase } from './db.js';
 import { McxFeedService } from './feed.js';
 import { MarketService } from './marketService.js';
+import { AiCommandService } from './aiCommandService.js';
 
 export interface AppOptions {
   dbPath?: string;
@@ -31,6 +32,7 @@ export async function createApp(options: AppOptions = {}): Promise<{
   const db = initDatabase(options.dbPath ?? './bullion-desk.db');
   const feed = new McxFeedService();
   const market = new MarketService(db, feed);
+  const aiCommand = new AiCommandService(market);
 
   const wsClients = new Set<{ socket: { send: (data: string) => void; readyState: number }; group: 'GROUP_A' | 'GROUP_B' | 'PUBLIC' }>();
 
@@ -197,6 +199,34 @@ export async function createApp(options: AppOptions = {}): Promise<{
   });
 
   app.get('/api/positions', async () => market.getPositionSummary());
+
+  // v0.2.0: AI Voice & Hinglish Command Endpoint
+  app.post('/api/ai/command', async (req, reply) => {
+    const schema = z.object({
+      text: z.string().min(1),
+      sessionId: z.string().default('default-session'),
+      role: z.enum(['DEALER', 'CLIENT']).default('DEALER'),
+      clientId: z.string().optional(),
+      autoExecute: z.boolean().default(true),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.flatten() });
+    }
+    try {
+      const result = aiCommand.executeCommand(parsed.data.text, parsed.data.sessionId, {
+        role: parsed.data.role,
+        clientId: parsed.data.clientId,
+        autoExecute: parsed.data.autoExecute,
+      });
+      if (result.executed) {
+        broadcastMarket();
+      }
+      return result;
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
 
   app.addHook('onClose', async () => {
     feed.stop();

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Order, ScripConfig, ScripQuote } from '@bullion-desk/shared';
 import { Download, Lock, RefreshCw, Unlock } from 'lucide-react';
 import { api } from '../api';
+import { VoiceCommandBar } from './VoiceCommandBar';
 
 interface Props {
   scrips: ScripConfig[];
@@ -67,6 +68,18 @@ export function DealerDesk({
 
   return (
     <div className="space-y-6">
+      <VoiceCommandBar
+        role="DEALER"
+        sessionId="dealer-desk-voice"
+        samples={[
+          'Silver cash 100 rupaye badha do',
+          'Aur 50 kam kar do',
+          'Gold 995 RTGS spread 200 kar do',
+          'Sab rate freeze kar do',
+          'Market chalu karo',
+        ]}
+        onExecuted={() => onRefresh()}
+      />
       {/* Kill Switch & Controls */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
         <div className="flex flex-wrap items-center gap-3">

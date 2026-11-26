@@ -10,6 +10,7 @@ import {
 } from '@bullion-desk/shared';
 import { CheckCircle2, Clock, Coins, ShieldAlert, XCircle } from 'lucide-react';
 import { api } from '../api';
+import { VoiceCommandBar } from './VoiceCommandBar';
 
 interface Props {
   quotes: ScripQuote[];
@@ -105,6 +106,16 @@ export function ClientBoard({
 
   return (
     <div className="space-y-6">
+      <VoiceCommandBar
+        role="CLIENT"
+        sessionId={`client-voice-${selectedClient?.id ?? 'default'}`}
+        clientId={selectedClient?.id}
+        samples={[
+          '2 peti chandi pakki kar do',
+          '10g gold 999 rtgs book karo',
+        ]}
+        onExecuted={() => onOrderChanged()}
+      />
       {/* Client Context & Settlement Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
         <div className="flex flex-wrap items-center gap-3">
