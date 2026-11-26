@@ -6,14 +6,15 @@ import type {
   ScripConfig,
   WsServerMessage,
 } from '@bullion-desk/shared';
-import { Crown, LayoutDashboard, Store } from 'lucide-react';
+import { Crown, LayoutDashboard, MessageCircle, Store } from 'lucide-react';
 import { api, WS_BASE } from './api';
 import { ClientBoard } from './components/ClientBoard';
 import { DealerDesk } from './components/DealerDesk';
 import { TickerStrip } from './components/TickerStrip';
+import { WhatsAppSimulator } from './components/WhatsAppSimulator';
 
 export function App() {
-  const [view, setView] = useState<'CLIENT' | 'DEALER'>('CLIENT');
+  const [view, setView] = useState<'CLIENT' | 'DEALER' | 'WHATSAPP'>('CLIENT');
   const [market, setMarket] = useState<MarketState | null>(null);
   const [scrips, setScrips] = useState<ScripConfig[]>([]);
   const [clients, setClients] = useState<ClientProfile[]>([]);
@@ -104,6 +105,18 @@ export function App() {
               <LayoutDashboard className="h-3.5 w-3.5" />
               Dealer Admin Desk
             </button>
+            <button
+              data-testid="nav-whatsapp"
+              onClick={() => setView('WHATSAPP')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                view === 'WHATSAPP'
+                  ? 'bg-emerald-500 text-slate-950'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <MessageCircle className="h-3.5 w-3.5" />
+              WhatsApp Agents
+            </button>
           </nav>
         </div>
       </header>
@@ -115,7 +128,7 @@ export function App() {
       />
 
       <main className="mx-auto max-w-7xl px-4 py-6">
-        {view === 'CLIENT' ? (
+        {view === 'CLIENT' && (
           <ClientBoard
             quotes={market?.quotes ?? []}
             isFrozen={market?.isFrozen ?? false}
@@ -125,7 +138,8 @@ export function App() {
             orders={orders}
             onOrderChanged={loadAll}
           />
-        ) : (
+        )}
+        {view === 'DEALER' && (
           <DealerDesk
             scrips={scrips}
             quotes={market?.quotes ?? []}
@@ -135,6 +149,9 @@ export function App() {
             positions={positions}
             onRefresh={loadAll}
           />
+        )}
+        {view === 'WHATSAPP' && (
+          <WhatsAppSimulator clients={clients} onOrderOrRateChanged={loadAll} />
         )}
       </main>
     </div>

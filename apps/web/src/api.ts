@@ -80,4 +80,20 @@ export const api = {
       message: string;
       order?: Order;
     }>('/api/ai/command', { method: 'POST', body: JSON.stringify(payload) }),
+  simulateWhatsApp: (phone: string, text: string) =>
+    request<{ reply: string; role: 'OWNER' | 'SUB_DEALER' | 'PUBLIC' }>('/api/whatsapp/simulate', {
+      method: 'POST',
+      body: JSON.stringify({ phone, text }),
+    }),
+  getWhatsAppMessages: (phone?: string) =>
+    request<
+      Array<{
+        id: string;
+        phone: string;
+        senderRole: string;
+        direction: 'INBOUND' | 'OUTBOUND';
+        text: string;
+        timestamp: number;
+      }>
+    >(`/api/whatsapp/messages${phone ? `?phone=${encodeURIComponent(phone)}` : ''}`),
 };

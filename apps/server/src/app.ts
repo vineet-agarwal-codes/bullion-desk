@@ -12,6 +12,7 @@ import { initDatabase } from './db.js';
 import { McxFeedService } from './feed.js';
 import { MarketService } from './marketService.js';
 import { AiCommandService } from './aiCommandService.js';
+import { WhatsAppAgentService } from './whatsappService.js';
 
 export interface AppOptions {
   dbPath?: string;
@@ -33,6 +34,7 @@ export async function createApp(options: AppOptions = {}): Promise<{
   const feed = new McxFeedService();
   const market = new MarketService(db, feed);
   const aiCommand = new AiCommandService(market);
+  const whatsapp = new WhatsAppAgentService(market, aiCommand);
 
   const wsClients = new Set<{ socket: { send: (data: string) => void; readyState: number }; group: 'GROUP_A' | 'GROUP_B' | 'PUBLIC' }>();
 
@@ -226,6 +228,74 @@ export async function createApp(options: AppOptions = {}): Promise<{
     } catch (err) {
       return reply.status(400).send({ error: (err as Error).message });
     }
+  });
+
+  // v0.3.0: WhatsApp Cloud API Webhook + Simulator Endpoints
+  app.get('/api/whatsapp/webhook', async (req, reply) => {
+    const query = req.query as Record<string, string>;
+    const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN ?? 'bullion-desk-verify';
+    if (query['hub.mode'] === 'subscribe' && query['hub.verify_token'] === verifyToken) {
+      return reply.status(200).send(query['hub.challenge'] ?? '');
+    }
+    return reply.status(403).send({ error: 'Verification failed' });
+  });
+
+  app.post('/api/whatsapp/webhook', async (req, reply) => {
+    const metaSchema = z.object({
+      entry: z.array(
+        z.object({
+          changes: z.array(
+            z.object({
+              value: z.object({
+                messages: z
+                  .array(
+                    z.object({
+                      from: z.string(),
+                      text: z.object({ body: z.string() }).optional(),
+                    })
+                  )
+                  .optional(),
+              }),
+            })
+          ),
+        })
+      ),
+    });
+    const parsed = metaSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid Meta WhatsApp webhook payload' });
+    }
+    const replies: Array<{ to: string; reply: string; role: string }> = [];
+    for (const entry of parsed.data.entry) {
+      for (const change of entry.changes) {
+        for (const msg of change.value.messages ?? []) {
+          const phone = msg.from.startsWith('+') ? msg.from : `+${msg.from}`;
+          const text = msg.text?.body ?? '';
+          if (text) {
+            const res = whatsapp.handleIncoming(phone, text);
+            replies.push({ to: phone, ...res });
+          }
+        }
+      }
+    }
+    broadcastMarket();
+    return { status: 'ok', replies };
+  });
+
+  app.post('/api/whatsapp/simulate', async (req) => {
+    const schema = z.object({
+      phone: z.string().min(1),
+      text: z.string().min(1),
+    });
+    const body = schema.parse(req.body);
+    const res = whatsapp.handleIncoming(body.phone, body.text);
+    broadcastMarket();
+    return res;
+  });
+
+  app.get('/api/whatsapp/messages', async (req) => {
+    const query = req.query as { phone?: string };
+    return whatsapp.getMessages(query.phone);
   });
 
   app.addHook('onClose', async () => {
