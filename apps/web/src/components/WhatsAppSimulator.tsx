@@ -14,6 +14,7 @@ export function WhatsAppSimulator({ user, clients, onOrderOrRateChanged }: Props
     user.role === 'SUB_DEALER' && user.phone ? user.phone : '+919811001122';
   const [selectedPhone, setSelectedPhone] = useState<string>(defaultPhone);
   const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
   const [messages, setMessages] = useState<
     Array<{
       id: string;
@@ -36,11 +37,31 @@ export function WhatsAppSimulator({ user, clients, onOrderOrRateChanged }: Props
 
   const sendMsg = async (msgText: string) => {
     const trimmed = msgText.trim();
-    if (!trimmed) return;
-    await api.simulateWhatsApp(selectedPhone, trimmed);
+    if (!trimmed || sending) return;
+
+    // Optimistically show sent message immediately and clear input
+    const optimisticId = `opt-${Date.now()}`;
     setText('');
-    await loadMessages();
-    onOrderOrRateChanged();
+    setSending(true);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: optimisticId,
+        phone: selectedPhone,
+        senderRole: selectedPhone === '+919999999999' ? 'OWNER' : 'SUB_DEALER',
+        direction: 'INBOUND',
+        text: trimmed,
+        timestamp: Date.now(),
+      },
+    ]);
+
+    try {
+      await api.simulateWhatsApp(selectedPhone, trimmed);
+      await loadMessages();
+      onOrderOrRateChanged();
+    } finally {
+      setSending(false);
+    }
   };
 
   const isOwner = selectedPhone === '+919999999999';
@@ -145,6 +166,13 @@ export function WhatsAppSimulator({ user, clients, onOrderOrRateChanged }: Props
               </div>
             </div>
           ))}
+          {sending && (
+            <div className="flex justify-start" data-testid="wa-typing-indicator">
+              <div className="rounded-xl rounded-bl-none border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs text-slate-400 animate-pulse">
+                Shubh Jewellers Bot is typing...
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="border-t border-slate-800 bg-slate-900/90 p-3 space-y-2">
@@ -153,8 +181,9 @@ export function WhatsAppSimulator({ user, clients, onOrderOrRateChanged }: Props
               <button
                 key={chip}
                 type="button"
+                disabled={sending}
                 onClick={() => sendMsg(chip)}
-                className="rounded-full border border-slate-700 bg-slate-950 px-2.5 py-1 text-[11px] text-slate-300 hover:border-emerald-500 hover:text-emerald-300"
+                className="rounded-full border border-slate-700 bg-slate-950 px-2.5 py-1 text-[11px] text-slate-300 hover:border-emerald-500 hover:text-emerald-300 disabled:opacity-40"
               >
                 {chip}
               </button>
@@ -178,10 +207,11 @@ export function WhatsAppSimulator({ user, clients, onOrderOrRateChanged }: Props
             <button
               data-testid="wa-send-btn"
               type="submit"
-              className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-400"
+              disabled={sending || !text.trim()}
+              className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
             >
               <Send className="h-3.5 w-3.5" />
-              Send
+              {sending ? 'Sending...' : 'Send'}
             </button>
           </form>
         </div>
