@@ -5,7 +5,8 @@ test.describe('BullionDesk v0.2.0 AI Voice & Context Commands', () => {
     page,
   }) => {
     await page.goto('/');
-    await page.getByTestId('nav-dealer-desk').click();
+    await page.getByTestId('demo-login-admin').click();
+    await expect(page.getByTestId('nav-dealer-desk')).toBeVisible();
 
     // 1. Initial Silver 999 Cash offset is +450
     await expect(page.getByTestId('offset-val-silver-999-cash')).toHaveText('+450');

@@ -1,8 +1,9 @@
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import type Database from 'better-sqlite3';
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import {
+  type AuthUser,
   ClientGroupSchema,
   CreateOrderInputSchema,
   type WsServerMessage,
@@ -15,10 +16,12 @@ import { AiCommandService } from './aiCommandService.js';
 import { WhatsAppAgentService } from './whatsappService.js';
 import { HedgingService } from './hedgingService.js';
 import { RiskAndComplianceService } from './riskService.js';
+import { AuthService } from './authService.js';
 
 export interface AppOptions {
   dbPath?: string;
   enableFeedTimer?: boolean;
+  enableLiveFeed?: boolean;
   feedIntervalMs?: number;
 }
 
@@ -27,6 +30,7 @@ export async function createApp(options: AppOptions = {}): Promise<{
   db: Database.Database;
   feed: McxFeedService;
   market: MarketService;
+  auth: AuthService;
 }> {
   const app = Fastify({ logger: false });
   await app.register(cors, { origin: true });
@@ -35,12 +39,48 @@ export async function createApp(options: AppOptions = {}): Promise<{
   const db = initDatabase(options.dbPath ?? './bullion-desk.db');
   const feed = new McxFeedService();
   const market = new MarketService(db, feed);
+  const auth = new AuthService(db);
   const aiCommand = new AiCommandService(market);
   const whatsapp = new WhatsAppAgentService(market, aiCommand);
   const hedging = new HedgingService(db);
   const risk = new RiskAndComplianceService(db, market);
 
-  const wsClients = new Set<{ socket: { send: (data: string) => void; readyState: number }; group: 'GROUP_A' | 'GROUP_B' | 'PUBLIC' }>();
+  const getUserFromReq = (req: FastifyRequest): AuthUser | null => {
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      return auth.verifyToken(authHeader.slice(7).trim());
+    }
+    const query = req.query as { token?: string } | undefined;
+    if (query?.token) {
+      return auth.verifyToken(query.token);
+    }
+    return null;
+  };
+
+  const requireAuth = async (req: FastifyRequest, reply: FastifyReply): Promise<AuthUser | null> => {
+    const user = getUserFromReq(req);
+    if (!user) {
+      reply.status(401).send({ error: 'Authentication required' });
+      return null;
+    }
+    return user;
+  };
+
+  const requireAdmin = async (req: FastifyRequest, reply: FastifyReply): Promise<AuthUser | null> => {
+    const user = await requireAuth(req, reply);
+    if (!user) return null;
+    if (user.role !== 'ADMIN') {
+      reply.status(403).send({ error: 'Forbidden: Dealer Admin access required' });
+      return null;
+    }
+    return user;
+  };
+
+  const wsClients = new Set<{
+    socket: { send: (data: string) => void; readyState: number };
+    group: 'GROUP_A' | 'GROUP_B' | 'PUBLIC';
+    user: AuthUser | null;
+  }>();
 
   const broadcastMarket = () => {
     for (const client of wsClients) {
@@ -71,23 +111,60 @@ export async function createApp(options: AppOptions = {}): Promise<{
     const raw = JSON.stringify(msg);
     for (const client of wsClients) {
       if (client.socket.readyState === 1) {
-        client.socket.send(raw);
+        // RBAC: Only broadcast order events to ADMIN or the owning SUB_DEALER
+        if (
+          client.user?.role === 'ADMIN' ||
+          (client.user?.role === 'SUB_DEALER' && client.user.clientId === order.clientId)
+        ) {
+          client.socket.send(raw);
+        }
       }
     }
   });
 
   if (options.enableFeedTimer !== false) {
-    feed.start(options.feedIntervalMs ?? 1500);
+    feed.start(options.feedIntervalMs ?? 2000, options.enableLiveFeed ?? false);
   }
 
   app.get('/health', async () => ({ status: 'ok', timestamp: Date.now() }));
 
-  app.get('/ws', { websocket: true }, (socket, req) => {
-    const query = req.query as { group?: string };
-    const parsedGroup = ClientGroupSchema.safeParse(query.group ?? 'GROUP_B');
-    const group = parsedGroup.success ? parsedGroup.data : 'GROUP_B';
+  // Authentication Endpoints
+  app.post('/api/auth/login', async (req, reply) => {
+    const schema = z.object({
+      username: z.string().min(1),
+      password: z.string().min(1),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Username and password are required' });
+    }
+    const result = auth.login(parsed.data.username, parsed.data.password);
+    if (!result) {
+      return reply.status(401).send({ error: 'Invalid username/phone or password' });
+    }
+    return result;
+  });
 
-    const entry = { socket, group };
+  app.get('/api/auth/me', async (req, reply) => {
+    const user = await requireAuth(req, reply);
+    if (!user) return;
+    return { user };
+  });
+
+  // WebSocket (RBAC-scoped)
+  app.get('/ws', { websocket: true }, (socket, req) => {
+    const user = getUserFromReq(req);
+    const query = req.query as { group?: string };
+    let group: 'GROUP_A' | 'GROUP_B' | 'PUBLIC' = 'PUBLIC';
+
+    if (user?.role === 'ADMIN') {
+      const parsedGroup = ClientGroupSchema.safeParse(query.group ?? 'GROUP_B');
+      group = parsedGroup.success ? parsedGroup.data : 'GROUP_B';
+    } else if (user?.role === 'SUB_DEALER') {
+      group = user.clientGroup ?? 'GROUP_B';
+    }
+
+    const entry = { socket, group, user };
     wsClients.add(entry);
 
     const snapshot: WsServerMessage = {
@@ -101,15 +178,23 @@ export async function createApp(options: AppOptions = {}): Promise<{
     });
   });
 
-  // Market State & Quotes
+  // Market State & Quotes (RBAC-aware tiering)
   app.get('/api/market', async (req) => {
+    const user = getUserFromReq(req);
     const query = req.query as { group?: string };
-    const parsed = ClientGroupSchema.safeParse(query.group ?? 'GROUP_B');
-    return market.getMarketState(parsed.success ? parsed.data : 'GROUP_B');
+    let group: 'GROUP_A' | 'GROUP_B' | 'PUBLIC' = 'PUBLIC';
+    if (user?.role === 'ADMIN') {
+      const parsed = ClientGroupSchema.safeParse(query.group ?? 'GROUP_B');
+      group = parsed.success ? parsed.data : 'GROUP_B';
+    } else if (user?.role === 'SUB_DEALER') {
+      group = user.clientGroup ?? 'GROUP_B';
+    }
+    return market.getMarketState(group);
   });
 
-  // Admin: Inject MCX Tick (for testing / simulation)
-  app.post('/api/market/tick', async (req) => {
+  // Admin Only: Inject MCX Tick
+  app.post('/api/market/tick', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return;
     const schema = z.object({
       goldMcx: z.number().positive().optional(),
       silverMcx: z.number().positive().optional(),
@@ -122,8 +207,9 @@ export async function createApp(options: AppOptions = {}): Promise<{
     return { tick };
   });
 
-  // Admin: Kill Switch (Freeze / Unfreeze)
-  app.post('/api/market/freeze', async (req) => {
+  // Admin Only: Kill Switch (Freeze / Unfreeze)
+  app.post('/api/market/freeze', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return;
     const schema = z.object({
       isFrozen: z.boolean(),
       reason: z.string().optional(),
@@ -134,10 +220,14 @@ export async function createApp(options: AppOptions = {}): Promise<{
     return state;
   });
 
-  // Scrips CRUD
-  app.get('/api/scrips', async () => market.listScrips());
+  // Scrips (Read for auth users, Write for ADMIN only)
+  app.get('/api/scrips', async (req, reply) => {
+    if (!(await requireAuth(req, reply))) return;
+    return market.listScrips();
+  });
 
   app.patch('/api/scrips/:id', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return;
     const { id } = req.params as { id: string };
     const schema = z.object({
       manualOffset: z.number().optional(),
@@ -155,10 +245,19 @@ export async function createApp(options: AppOptions = {}): Promise<{
     }
   });
 
-  // Clients
-  app.get('/api/clients', async () => market.listClients());
+  // Clients (RBAC: ADMIN sees all, SUB_DEALER sees ONLY self)
+  app.get('/api/clients', async (req, reply) => {
+    const user = await requireAuth(req, reply);
+    if (!user) return;
+    if (user.role === 'ADMIN') {
+      return market.listClients();
+    }
+    const own = user.clientId ? market.getClient(user.clientId) : null;
+    return own ? [own] : [];
+  });
 
   app.patch('/api/clients/:id', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return;
     const { id } = req.params as { id: string };
     const schema = z.object({
       maxSilverKg: z.number().nonnegative().optional(),
@@ -174,13 +273,24 @@ export async function createApp(options: AppOptions = {}): Promise<{
     }
   });
 
-  // Orders
-  app.get('/api/orders', async () => market.listOrders());
+  // Orders (RBAC: ADMIN sees all, SUB_DEALER sees ONLY own orders)
+  app.get('/api/orders', async (req, reply) => {
+    const user = await requireAuth(req, reply);
+    if (!user) return;
+    const all = market.listOrders();
+    if (user.role === 'ADMIN') return all;
+    return all.filter((o) => o.clientId === user.clientId);
+  });
 
   app.post('/api/orders', async (req, reply) => {
+    const user = await requireAuth(req, reply);
+    if (!user) return;
     const parsed = CreateOrderInputSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
+    }
+    if (user.role === 'SUB_DEALER' && parsed.data.clientId !== user.clientId) {
+      return reply.status(403).send({ error: 'Forbidden: Cannot place orders for another sub-dealer' });
     }
     try {
       const order = market.createOrder(parsed.data);
@@ -191,7 +301,14 @@ export async function createApp(options: AppOptions = {}): Promise<{
   });
 
   app.post('/api/orders/:id/confirm', async (req, reply) => {
+    const user = await requireAuth(req, reply);
+    if (!user) return;
     const { id } = req.params as { id: string };
+    const existing = market.getOrder(id);
+    if (!existing) return reply.status(404).send({ error: 'Order not found' });
+    if (user.role === 'SUB_DEALER' && existing.clientId !== user.clientId) {
+      return reply.status(403).send({ error: 'Forbidden: Cannot confirm another sub-dealer order' });
+    }
     try {
       return market.confirmOrder(id);
     } catch (err) {
@@ -200,7 +317,14 @@ export async function createApp(options: AppOptions = {}): Promise<{
   });
 
   app.post('/api/orders/:id/cancel', async (req, reply) => {
+    const user = await requireAuth(req, reply);
+    if (!user) return;
     const { id } = req.params as { id: string };
+    const existing = market.getOrder(id);
+    if (!existing) return reply.status(404).send({ error: 'Order not found' });
+    if (user.role === 'SUB_DEALER' && existing.clientId !== user.clientId) {
+      return reply.status(403).send({ error: 'Forbidden: Cannot cancel another sub-dealer order' });
+    }
     try {
       return market.cancelOrder(id);
     } catch (err) {
@@ -208,10 +332,15 @@ export async function createApp(options: AppOptions = {}): Promise<{
     }
   });
 
-  app.get('/api/positions', async () => market.getPositionSummary());
+  app.get('/api/positions', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return;
+    return market.getPositionSummary();
+  });
 
-  // v0.2.0: AI Voice & Hinglish Command Endpoint
+  // AI Voice & Hinglish Command Endpoint (RBAC-scoped)
   app.post('/api/ai/command', async (req, reply) => {
+    const user = await requireAuth(req, reply);
+    if (!user) return;
     const schema = z.object({
       text: z.string().min(1),
       sessionId: z.string().default('default-session'),
@@ -223,10 +352,18 @@ export async function createApp(options: AppOptions = {}): Promise<{
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
     }
+
+    if (user.role === 'SUB_DEALER' && parsed.data.role === 'DEALER') {
+      return reply.status(403).send({ error: 'Forbidden: Sub-dealers cannot run dealer price commands' });
+    }
+
+    const effectiveRole = user.role === 'ADMIN' ? parsed.data.role : 'CLIENT';
+    const effectiveClientId = user.role === 'ADMIN' ? parsed.data.clientId : (user.clientId ?? undefined);
+
     try {
       const result = aiCommand.executeCommand(parsed.data.text, parsed.data.sessionId, {
-        role: parsed.data.role,
-        clientId: parsed.data.clientId,
+        role: effectiveRole,
+        clientId: effectiveClientId,
         autoExecute: parsed.data.autoExecute,
       });
       if (result.executed) {
@@ -238,7 +375,7 @@ export async function createApp(options: AppOptions = {}): Promise<{
     }
   });
 
-  // v0.3.0: WhatsApp Cloud API Webhook + Simulator Endpoints
+  // Meta WhatsApp Cloud API Webhook (verified by hub.verify_token)
   app.get('/api/whatsapp/webhook', async (req, reply) => {
     const query = req.query as Record<string, string>;
     const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN ?? 'bullion-desk-verify';
@@ -290,39 +427,61 @@ export async function createApp(options: AppOptions = {}): Promise<{
     return { status: 'ok', replies };
   });
 
-  app.post('/api/whatsapp/simulate', async (req) => {
+  // WhatsApp Simulator Endpoints (RBAC-scoped)
+  app.post('/api/whatsapp/simulate', async (req, reply) => {
+    const user = await requireAuth(req, reply);
+    if (!user) return;
     const schema = z.object({
       phone: z.string().min(1),
       text: z.string().min(1),
     });
     const body = schema.parse(req.body);
+    if (user.role === 'SUB_DEALER' && body.phone !== user.phone) {
+      return reply.status(403).send({ error: 'Forbidden: Can only simulate your own WhatsApp number' });
+    }
     const res = whatsapp.handleIncoming(body.phone, body.text);
     broadcastMarket();
     return res;
   });
 
-  app.get('/api/whatsapp/messages', async (req) => {
+  app.get('/api/whatsapp/messages', async (req, reply) => {
+    const user = await requireAuth(req, reply);
+    if (!user) return;
     const query = req.query as { phone?: string };
+    if (user.role === 'SUB_DEALER') {
+      return whatsapp.getMessages(user.phone ?? '__none__');
+    }
     return whatsapp.getMessages(query.phone);
   });
 
-  // v0.4.0: Auto-Hedging, Dynamic Spread, Badla MTM Risk & RTGS Fraud Shield
-  app.get('/api/hedging', async () => ({
-    mode: hedging.getMode(),
-    residuals: hedging.getResiduals(),
-    executions: hedging.listExecutions(),
-  }));
+  // Admin Only: Auto-Hedging, Dynamic Spread, Badla MTM Risk & RTGS Fraud Shield
+  app.get('/api/hedging', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return;
+    return {
+      mode: hedging.getMode(),
+      residuals: hedging.getResiduals(),
+      executions: hedging.listExecutions(),
+    };
+  });
 
-  app.post('/api/hedging/mode', async (req) => {
+  app.post('/api/hedging/mode', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return;
     const body = z.object({ mode: z.enum(['LIVE', 'SHADOW']) }).parse(req.body);
     return { mode: hedging.setMode(body.mode) };
   });
 
-  app.get('/api/risk/spread-status', async () => risk.getDynamicSpreadStatus());
+  app.get('/api/risk/spread-status', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return;
+    return risk.getDynamicSpreadStatus();
+  });
 
-  app.get('/api/risk/unfixed', async () => risk.listUnfixedPositions());
+  app.get('/api/risk/unfixed', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return;
+    return risk.listUnfixedPositions();
+  });
 
   app.post('/api/risk/unfixed', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return;
     const schema = z.object({
       clientId: z.string().min(1),
       metal: z.enum(['GOLD', 'SILVER']),
@@ -340,6 +499,7 @@ export async function createApp(options: AppOptions = {}): Promise<{
   });
 
   app.post('/api/risk/unfixed/:id/liquidate', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return;
     const { id } = req.params as { id: string };
     try {
       return risk.liquidateUnfixedPosition(id);
@@ -348,9 +508,13 @@ export async function createApp(options: AppOptions = {}): Promise<{
     }
   });
 
-  app.get('/api/compliance/rtgs', async () => risk.listRtgsVerifications());
+  app.get('/api/compliance/rtgs', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return;
+    return risk.listRtgsVerifications();
+  });
 
   app.post('/api/compliance/rtgs/verify', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return;
     const schema = z.object({
       clientId: z.string().min(1),
       remitterName: z.string().min(1),
@@ -373,5 +537,5 @@ export async function createApp(options: AppOptions = {}): Promise<{
     db.close();
   });
 
-  return { app, db, feed, market };
+  return { app, db, feed, market, auth };
 }

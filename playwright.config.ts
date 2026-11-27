@@ -12,7 +12,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: 'PORT=3001 DB_PATH=/tmp/bullion-e2e.db npm --workspace=@bullion-desk/server run dev',
+      command: 'PORT=3001 DB_PATH=/tmp/bullion-e2e.db ENABLE_LIVE_FEED=false npm --workspace=@bullion-desk/server run dev',
       port: 3001,
       reuseExistingServer: false,
       timeout: 30_000,

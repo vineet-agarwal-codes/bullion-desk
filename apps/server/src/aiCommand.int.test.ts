@@ -3,9 +3,18 @@ import { createApp } from './app.js';
 
 describe('AI Command API Integration', () => {
   let ctx: Awaited<ReturnType<typeof createApp>>;
+  let adminHeaders: Record<string, string>;
 
   beforeEach(async () => {
     ctx = await createApp({ dbPath: ':memory:', enableFeedTimer: false });
+    const login = (
+      await ctx.app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { username: 'admin', password: 'admin123' },
+      })
+    ).json();
+    adminHeaders = { Authorization: `Bearer ${login.token}` };
   });
 
   afterEach(async () => {
@@ -16,6 +25,7 @@ describe('AI Command API Integration', () => {
     const freezeRes = await ctx.app.inject({
       method: 'POST',
       url: '/api/ai/command',
+      headers: adminHeaders,
       payload: { text: 'Sab rate freeze kar do', sessionId: 'dealer-1', role: 'DEALER' },
     });
     expect(freezeRes.statusCode).toBe(200);
@@ -25,6 +35,7 @@ describe('AI Command API Integration', () => {
     const unfreezeRes = await ctx.app.inject({
       method: 'POST',
       url: '/api/ai/command',
+      headers: adminHeaders,
       payload: { text: 'Market chalu karo', sessionId: 'dealer-1', role: 'DEALER' },
     });
     expect(unfreezeRes.statusCode).toBe(200);

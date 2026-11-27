@@ -1,17 +1,37 @@
 import type { McxTick } from '@bullion-desk/shared';
 
+async function fetchYahooPrice(symbol: string): Promise<number> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1m&range=1d`;
+  const res = await fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0' },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) throw new Error(`Yahoo Finance ${symbol} HTTP ${res.status}`);
+  const data = (await res.json()) as {
+    chart?: { result?: Array<{ meta?: { regularMarketPrice?: number } }> };
+  };
+  const price = data.chart?.result?.[0]?.meta?.regularMarketPrice;
+  if (typeof price !== 'number' || !Number.isFinite(price)) {
+    throw new Error(`Invalid price for ${symbol}`);
+  }
+  return price;
+}
+
 export class McxFeedService {
   private currentTick: McxTick;
   private timer: NodeJS.Timeout | null = null;
+  private liveSyncTimer: NodeJS.Timeout | null = null;
   private listeners: Array<(tick: McxTick) => void> = [];
 
   constructor(initialTick?: Partial<McxTick>) {
+    // Realistic Nov 2026 MCX Gold (~₹1,15,450/10g) & Silver (~₹1,38,200/kg) defaults
     this.currentTick = {
-      goldMcx: initialTick?.goldMcx ?? 78450,
-      silverMcx: initialTick?.silverMcx ?? 94200,
-      goldComex: initialTick?.goldComex ?? 2665.5,
-      silverComex: initialTick?.silverComex ?? 31.42,
-      usdInr: initialTick?.usdInr ?? 84.42,
+      goldMcx: initialTick?.goldMcx ?? 115450,
+      silverMcx: initialTick?.silverMcx ?? 138200,
+      goldComex: initialTick?.goldComex ?? 3655.8,
+      silverComex: initialTick?.silverComex ?? 43.77,
+      usdInr: initialTick?.usdInr ?? 92.66,
+      source: initialTick?.source ?? 'SIMULATED',
       timestamp: initialTick?.timestamp ?? Date.now(),
     };
   }
@@ -39,23 +59,53 @@ export class McxFeedService {
     return this.getTick();
   }
 
+  /**
+   * Fetches live international Gold (GC=F), Silver (SI=F), and USD/INR (INR=X)
+   * and converts to Indian MCX landed parity (with 6% Indian customs duty + AIDC).
+   */
+  async syncLiveParity(): Promise<McxTick | null> {
+    try {
+      const [gc, si, usdInr] = await Promise.all([
+        fetchYahooPrice('GC=F'),
+        fetchYahooPrice('SI=F'),
+        fetchYahooPrice('INR=X'),
+      ]);
+      const TROY_OZ_GRAMS = 31.1034768;
+      const INDIA_IMPORT_PARITY = 1.06; // 6% customs + AIDC
+
+      const goldMcx = Math.round((gc / TROY_OZ_GRAMS) * 10 * usdInr * INDIA_IMPORT_PARITY);
+      const silverMcx = Math.round((si / TROY_OZ_GRAMS) * 1000 * usdInr * INDIA_IMPORT_PARITY);
+
+      return this.setTick({
+        goldMcx,
+        silverMcx,
+        goldComex: Number(gc.toFixed(2)),
+        silverComex: Number(si.toFixed(2)),
+        usdInr: Number(usdInr.toFixed(2)),
+        source: 'LIVE_PARITY',
+      });
+    } catch {
+      return null;
+    }
+  }
+
   stepRandom(): McxTick {
     const goldDelta = Math.round((Math.random() - 0.49) * 35);
     const silverDelta = Math.round((Math.random() - 0.49) * 80);
-    const comexGoldDelta = Number(((Math.random() - 0.49) * 1.4).toFixed(2));
-    const comexSilverDelta = Number(((Math.random() - 0.49) * 0.05).toFixed(2));
-    const usdDelta = Number(((Math.random() - 0.5) * 0.02).toFixed(2));
 
     return this.setTick({
       goldMcx: Math.max(50000, this.currentTick.goldMcx + goldDelta),
       silverMcx: Math.max(60000, this.currentTick.silverMcx + silverDelta),
-      goldComex: Math.max(1800, Number((this.currentTick.goldComex + comexGoldDelta).toFixed(2))),
-      silverComex: Math.max(18, Number((this.currentTick.silverComex + comexSilverDelta).toFixed(2))),
-      usdInr: Math.max(75, Number((this.currentTick.usdInr + usdDelta).toFixed(2))),
     });
   }
 
-  start(intervalMs = 1500) {
+  start(intervalMs = 2000, enableLiveFetch = true) {
+    if (enableLiveFetch && !this.liveSyncTimer) {
+      void this.syncLiveParity();
+      this.liveSyncTimer = setInterval(() => {
+        void this.syncLiveParity();
+      }, 15_000);
+    }
     if (this.timer) return;
     this.timer = setInterval(() => {
       this.stepRandom();
@@ -66,6 +116,10 @@ export class McxFeedService {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
+    }
+    if (this.liveSyncTimer) {
+      clearInterval(this.liveSyncTimer);
+      this.liveSyncTimer = null;
     }
   }
 }

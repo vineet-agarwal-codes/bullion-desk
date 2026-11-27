@@ -6,7 +6,11 @@ test.describe('BullionDesk v0.1.0 Core Flow', () => {
   }) => {
     await page.goto('/');
 
-    // 1. Sub-dealer sees live Gold 999 RTGS & Silver 999 Cash rates
+    // Login as Dealer Admin
+    await page.getByTestId('demo-login-admin').click();
+    await page.getByTestId('nav-client-board').click();
+
+    // 1. Live Gold 999 RTGS & Silver 999 Cash rates visible (no COMEX/USDINR)
     await expect(page.getByTestId('mcx-gold-tick')).toBeVisible();
     await expect(page.getByTestId('rate-row-gold-999-rtgs')).toBeVisible();
     await expect(page.getByTestId('rate-row-silver-999-cash')).toBeVisible();
@@ -19,7 +23,7 @@ test.describe('BullionDesk v0.1.0 Core Flow', () => {
     await page.getByTestId('adjust-gold-999-rtgs-100').click();
     await expect(page.getByTestId('offset-val-gold-999-rtgs')).toHaveText('+350');
 
-    // 3. Switch back to Sub-Dealer Rate Board and verify rate increased (within tick tolerance, ~+100)
+    // 3. Switch back to Rate Board and verify rate increased
     await page.getByTestId('nav-client-board').click();
     const updatedSellText = await page.getByTestId('buy-btn-gold-999-rtgs').innerText();
     const updatedSellVal = Number(updatedSellText.replace(/[₹,]/g, ''));
@@ -38,8 +42,10 @@ test.describe('BullionDesk v0.1.0 Core Flow', () => {
     await page.getByTestId('kill-switch-btn').click();
     await expect(page.getByTestId('market-status-badge')).toContainText('TRADING ACTIVE');
 
-    // 5. Sub-dealer places a Market BUY order and confirms it
-    await page.getByTestId('nav-client-board').click();
+    // 5. Logout and login as Sub-Dealer Mehra Sons to place & confirm Market Order
+    await page.getByTestId('logout-btn').click();
+    await page.getByTestId('demo-login-mehra').click();
+
     await page.getByTestId('buy-btn-gold-999-rtgs').click();
     await expect(page.getByTestId('order-ticket-modal')).toBeVisible();
     await page.getByTestId('order-qty-input').fill('2');

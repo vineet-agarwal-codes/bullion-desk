@@ -1,4 +1,5 @@
 import type {
+  AuthUser,
   ClientGroup,
   ClientProfile,
   CreateOrderInput,
@@ -12,10 +13,25 @@ export const WS_BASE = API_BASE
   ? API_BASE.replace(/^http/, 'ws')
   : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
 
+const TOKEN_KEY = 'bullion_auth_token';
+
+export function getAuthToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setAuthToken(token: string | null) {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     ...(init?.headers as Record<string, string> | undefined),
   };
+  const token = getAuthToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
   if (init?.body !== undefined) {
     headers['Content-Type'] = 'application/json';
   }
@@ -31,6 +47,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  login: (username: string, password: string) =>
+    request<{ token: string; user: AuthUser }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
+  getMe: () => request<{ user: AuthUser }>('/api/auth/me'),
   getMarket: (group: ClientGroup = 'GROUP_B') =>
     request<MarketState>(`/api/market?group=${group}`),
   getScrips: () => request<ScripConfig[]>('/api/scrips'),

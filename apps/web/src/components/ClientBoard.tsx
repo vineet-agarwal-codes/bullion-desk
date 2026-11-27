@@ -1,18 +1,20 @@
 import { useState } from 'react';
-import {
-  calculateOrderFinancials,
-  type ClientProfile,
-  type Order,
-  type OrderSide,
-  type OrderType,
-  type ScripQuote,
-  type SettlementType,
+import type {
+  AuthUser,
+  ClientProfile,
+  Order,
+  OrderSide,
+  OrderType,
+  ScripQuote,
+  SettlementType,
 } from '@bullion-desk/shared';
+import { calculateOrderFinancials } from '@bullion-desk/shared';
 import { CheckCircle2, Clock, Coins, ShieldAlert, XCircle } from 'lucide-react';
 import { api } from '../api';
 import { VoiceCommandBar } from './VoiceCommandBar';
 
 interface Props {
+  user: AuthUser;
   quotes: ScripQuote[];
   isFrozen: boolean;
   clients: ClientProfile[];
@@ -23,6 +25,7 @@ interface Props {
 }
 
 export function ClientBoard({
+  user,
   quotes,
   isFrozen,
   clients,
@@ -119,21 +122,30 @@ export function ClientBoard({
       {/* Client Context & Settlement Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
         <div className="flex flex-wrap items-center gap-3">
-          <label className="text-xs font-medium uppercase tracking-wider text-slate-400">
+          <span className="text-xs font-medium uppercase tracking-wider text-slate-400">
             Sub-Dealer Account:
-          </label>
-          <select
-            data-testid="client-selector"
-            value={selectedClient?.id ?? ''}
-            onChange={(e) => onSelectClient(e.target.value)}
-            className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm font-medium text-slate-100 focus:border-amber-500 focus:outline-none"
-          >
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.firmName} ({c.clientGroup})
-              </option>
-            ))}
-          </select>
+          </span>
+          {user.role === 'ADMIN' ? (
+            <select
+              data-testid="client-selector"
+              value={selectedClient?.id ?? ''}
+              onChange={(e) => onSelectClient(e.target.value)}
+              className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm font-medium text-slate-100 focus:border-amber-500 focus:outline-none"
+            >
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.firmName} ({c.clientGroup})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span
+              data-testid="logged-in-firm"
+              className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-sm font-semibold text-emerald-300"
+            >
+              {selectedClient?.firmName ?? user.displayName} ({selectedClient?.clientGroup ?? user.clientGroup})
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1 rounded-lg bg-slate-950 p-1 border border-slate-800">

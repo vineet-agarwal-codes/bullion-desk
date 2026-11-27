@@ -5,6 +5,8 @@ test.describe('BullionDesk v0.4.0 Hedge, Badla MTM & RTGS Fraud Shield', () => {
     page,
   }) => {
     await page.goto('/');
+    await page.getByTestId('demo-login-admin').click();
+    await page.getByTestId('nav-client-board').click();
 
     // 1. Place and confirm a 1 Peti (30kg) Silver order
     await page.getByTestId('buy-btn-silver-999-peti-cash').click();

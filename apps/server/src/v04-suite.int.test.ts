@@ -3,9 +3,18 @@ import { createApp } from './app.js';
 
 describe('v0.4.0 Auto-Hedging, Badla MTM Risk & RTGS Fraud Shield Integration', () => {
   let ctx: Awaited<ReturnType<typeof createApp>>;
+  let adminHeaders: Record<string, string>;
 
   beforeEach(async () => {
     ctx = await createApp({ dbPath: ':memory:', enableFeedTimer: false });
+    const login = (
+      await ctx.app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { username: 'admin', password: 'admin123' },
+      })
+    ).json();
+    adminHeaders = { Authorization: `Bearer ${login.token}` };
   });
 
   afterEach(async () => {
@@ -16,6 +25,7 @@ describe('v0.4.0 Auto-Hedging, Badla MTM Risk & RTGS Fraud Shield Integration', 
     const createRes = await ctx.app.inject({
       method: 'POST',
       url: '/api/orders',
+      headers: adminHeaders,
       payload: {
         clientId: 'client-agarwal',
         scripId: 'silver-999-peti-cash',
@@ -25,9 +35,13 @@ describe('v0.4.0 Auto-Hedging, Badla MTM Risk & RTGS Fraud Shield Integration', 
       },
     });
     const order = createRes.json();
-    await ctx.app.inject({ method: 'POST', url: `/api/orders/${order.id}/confirm` });
+    await ctx.app.inject({
+      method: 'POST',
+      url: `/api/orders/${order.id}/confirm`,
+      headers: adminHeaders,
+    });
 
-    const hedgeRes = await ctx.app.inject({ method: 'GET', url: '/api/hedging' });
+    const hedgeRes = await ctx.app.inject({ method: 'GET', url: '/api/hedging', headers: adminHeaders });
     const hedgeData = hedgeRes.json();
     expect(hedgeData.executions.length).toBe(1);
     expect(hedgeData.executions[0].contract).toBe('SILVER (30kg)');
@@ -39,11 +53,12 @@ describe('v0.4.0 Auto-Hedging, Badla MTM Risk & RTGS Fraud Shield Integration', 
     const posRes = await ctx.app.inject({
       method: 'POST',
       url: '/api/risk/unfixed',
+      headers: adminHeaders,
       payload: {
         clientId: 'client-sharma',
         metal: 'SILVER',
         grams: 50000, // 50 kg
-        entryRatePerUnit: 94200,
+        entryRatePerUnit: 138200,
         marginDepositedInr: 200000, // ₹2L margin
       },
     });
@@ -53,10 +68,15 @@ describe('v0.4.0 Auto-Hedging, Badla MTM Risk & RTGS Fraud Shield Integration', 
     await ctx.app.inject({
       method: 'POST',
       url: '/api/market/tick',
-      payload: { silverMcx: 98000 },
+      headers: adminHeaders,
+      payload: { silverMcx: 142000 },
     });
 
-    const listRes = await ctx.app.inject({ method: 'GET', url: '/api/risk/unfixed' });
+    const listRes = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/risk/unfixed',
+      headers: adminHeaders,
+    });
     const pos = listRes.json()[0];
     expect(pos.riskStatus).toBe('MARGIN_CALL');
     expect(pos.marginUtilizationPct).toBe(95);
@@ -64,6 +84,7 @@ describe('v0.4.0 Auto-Hedging, Badla MTM Risk & RTGS Fraud Shield Integration', 
     const liqRes = await ctx.app.inject({
       method: 'POST',
       url: `/api/risk/unfixed/${pos.id}/liquidate`,
+      headers: adminHeaders,
     });
     expect(liqRes.json().status).toBe('LIQUIDATED');
   });
@@ -72,6 +93,7 @@ describe('v0.4.0 Auto-Hedging, Badla MTM Risk & RTGS Fraud Shield Integration', 
     const blocked = await ctx.app.inject({
       method: 'POST',
       url: '/api/compliance/rtgs/verify',
+      headers: adminHeaders,
       payload: {
         clientId: 'client-mehra',
         remitterName: 'XYZ SHELL TRADING CO',
@@ -85,6 +107,7 @@ describe('v0.4.0 Auto-Hedging, Badla MTM Risk & RTGS Fraud Shield Integration', 
     const verified = await ctx.app.inject({
       method: 'POST',
       url: '/api/compliance/rtgs/verify',
+      headers: adminHeaders,
       payload: {
         clientId: 'client-mehra',
         remitterName: 'MEHRA SONS BULLION',

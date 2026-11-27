@@ -4,9 +4,18 @@ import { createApp } from './app.js';
 
 describe('Server API Response Contracts', () => {
   let ctx: Awaited<ReturnType<typeof createApp>>;
+  let adminHeaders: Record<string, string>;
 
   beforeEach(async () => {
     ctx = await createApp({ dbPath: ':memory:', enableFeedTimer: false });
+    const login = (
+      await ctx.app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { username: 'admin', password: 'admin123' },
+      })
+    ).json();
+    adminHeaders = { Authorization: `Bearer ${login.token}` };
   });
 
   afterEach(async () => {
@@ -23,6 +32,7 @@ describe('Server API Response Contracts', () => {
     const res = await ctx.app.inject({
       method: 'POST',
       url: '/api/orders',
+      headers: adminHeaders,
       payload: {
         clientId: 'client-agarwal',
         scripId: 'silver-999-rtgs',

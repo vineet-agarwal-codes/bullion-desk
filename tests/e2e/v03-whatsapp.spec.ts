@@ -5,7 +5,7 @@ test.describe('BullionDesk v0.3.0 WhatsApp Agents', () => {
     page,
   }) => {
     await page.goto('/');
-    await page.getByTestId('nav-dealer-desk').click();
+    await page.getByTestId('demo-login-admin').click();
     const beforeOffsetText = await page.getByTestId('offset-val-silver-999-cash').innerText();
     const beforeOffset = Number(beforeOffsetText.replace('+', ''));
 

@@ -25,12 +25,27 @@ export type OrderStatus = z.infer<typeof OrderStatusSchema>;
 export const ClientGroupSchema = z.enum(['GROUP_A', 'GROUP_B', 'PUBLIC']);
 export type ClientGroup = z.infer<typeof ClientGroupSchema>;
 
+export const UserRoleSchema = z.enum(['ADMIN', 'SUB_DEALER']);
+export type UserRole = z.infer<typeof UserRoleSchema>;
+
+export const AuthUserSchema = z.object({
+  id: z.string(),
+  username: z.string(),
+  role: UserRoleSchema,
+  displayName: z.string(),
+  clientId: z.string().nullable(),
+  clientGroup: ClientGroupSchema.nullable(),
+  phone: z.string().nullable(),
+});
+export type AuthUser = z.infer<typeof AuthUserSchema>;
+
 export const McxTickSchema = z.object({
   goldMcx: z.number().positive(),       // INR per 10g
   silverMcx: z.number().positive(),     // INR per 1kg
   goldComex: z.number().positive(),     // USD per oz
   silverComex: z.number().positive(),   // USD per oz
   usdInr: z.number().positive(),        // INR per USD
+  source: z.enum(['LIVE_PARITY', 'SIMULATED']).default('SIMULATED'),
   timestamp: z.number().int().positive(),
 });
 export type McxTick = z.infer<typeof McxTickSchema>;

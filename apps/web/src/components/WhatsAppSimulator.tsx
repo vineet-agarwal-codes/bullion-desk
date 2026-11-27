@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react';
-import type { ClientProfile } from '@bullion-desk/shared';
+import type { AuthUser, ClientProfile } from '@bullion-desk/shared';
 import { MessageCircle, Send, ShieldCheck, User } from 'lucide-react';
 import { api } from '../api';
 
 interface Props {
+  user: AuthUser;
   clients: ClientProfile[];
   onOrderOrRateChanged: () => void;
 }
 
-export function WhatsAppSimulator({ clients, onOrderOrRateChanged }: Props) {
-  const [selectedPhone, setSelectedPhone] = useState<string>('+919811001122');
+export function WhatsAppSimulator({ user, clients, onOrderOrRateChanged }: Props) {
+  const defaultPhone =
+    user.role === 'SUB_DEALER' && user.phone ? user.phone : '+919811001122';
+  const [selectedPhone, setSelectedPhone] = useState<string>(defaultPhone);
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<
     Array<{
@@ -58,21 +61,23 @@ export function WhatsAppSimulator({ clients, onOrderOrRateChanged }: Props) {
         </p>
 
         <div className="space-y-2">
-          <button
-            data-testid="wa-identity-owner"
-            onClick={() => setSelectedPhone('+919999999999')}
-            className={`w-full flex items-center gap-2.5 rounded-lg border p-3 text-left text-xs transition ${
-              isOwner
-                ? 'border-amber-500 bg-amber-500/10 text-amber-200'
-                : 'border-slate-800 bg-slate-950 text-slate-300 hover:border-slate-700'
-            }`}
-          >
-            <ShieldCheck className="h-4 w-4 text-amber-400 shrink-0" />
-            <div>
-              <div className="font-bold">Bullion House Owner</div>
-              <div className="text-slate-400">+919999999999 • Admin Agent</div>
-            </div>
-          </button>
+          {user.role === 'ADMIN' && (
+            <button
+              data-testid="wa-identity-owner"
+              onClick={() => setSelectedPhone('+919999999999')}
+              className={`w-full flex items-center gap-2.5 rounded-lg border p-3 text-left text-xs transition ${
+                isOwner
+                  ? 'border-amber-500 bg-amber-500/10 text-amber-200'
+                  : 'border-slate-800 bg-slate-950 text-slate-300 hover:border-slate-700'
+              }`}
+            >
+              <ShieldCheck className="h-4 w-4 text-amber-400 shrink-0" />
+              <div>
+                <div className="font-bold">Bullion House Owner</div>
+                <div className="text-slate-400">+919999999999 • Admin Agent</div>
+              </div>
+            </button>
+          )}
 
           {clients.map((c) => (
             <button

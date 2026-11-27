@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import type { ClientProfile, ScripConfig } from '@bullion-desk/shared';
+import { hashPassword } from './authService.js';
 
 export function initDatabase(dbPath: string = './bullion-desk.db'): Database.Database {
   const db = new Database(dbPath);
@@ -108,6 +109,16 @@ export function initDatabase(dbPath: string = './bullion-desk.db'): Database.Dat
       measured_grams REAL,
       eway_bill_no TEXT,
       created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      client_id TEXT REFERENCES clients(id),
+      phone TEXT
     );
   `);
 
@@ -349,5 +360,49 @@ function seedInitialData(db: Database.Database) {
     for (const c of defaultClients) {
       insertClient.run({ ...c, isActive: c.isActive ? 1 : 0 });
     }
+  }
+
+  const userCount = (db.prepare('SELECT COUNT(*) as c FROM users').get() as { c: number }).c;
+  if (userCount === 0) {
+    const insertUser = db.prepare(`
+      INSERT INTO users (id, username, password_hash, role, display_name, client_id, phone)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    insertUser.run(
+      'user-admin',
+      'admin',
+      hashPassword('admin123'),
+      'ADMIN',
+      'Bullion House Owner (Admin)',
+      null,
+      '+919999999999'
+    );
+    insertUser.run(
+      'user-mehra',
+      'mehra',
+      hashPassword('mehra123'),
+      'SUB_DEALER',
+      'Mehra Sons Bullion (Kucha Mahajani)',
+      'client-mehra',
+      '+919811001122'
+    );
+    insertUser.run(
+      'user-agarwal',
+      'agarwal',
+      hashPassword('agarwal123'),
+      'SUB_DEALER',
+      'Agarwal Payal & Bullion (Agra)',
+      'client-agarwal',
+      '+919837002233'
+    );
+    insertUser.run(
+      'user-sharma',
+      'sharma',
+      hashPassword('sharma123'),
+      'SUB_DEALER',
+      'Sharma Chains (Meerut)',
+      'client-sharma',
+      '+919719003344'
+    );
   }
 }

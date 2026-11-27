@@ -8,6 +8,7 @@ const sampleTick: McxTick = {
   goldComex: 2650,
   silverComex: 31.2,
   usdInr: 84.4,
+  source: 'SIMULATED',
   timestamp: 1700000000000,
 };
 

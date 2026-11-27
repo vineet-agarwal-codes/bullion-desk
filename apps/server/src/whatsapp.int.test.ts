@@ -3,9 +3,18 @@ import { createApp } from './app.js';
 
 describe('WhatsApp Agents Integration (Sub-Dealer & Owner)', () => {
   let ctx: Awaited<ReturnType<typeof createApp>>;
+  let adminHeaders: Record<string, string>;
 
   beforeEach(async () => {
     ctx = await createApp({ dbPath: ':memory:', enableFeedTimer: false });
+    const login = (
+      await ctx.app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { username: 'admin', password: 'admin123' },
+      })
+    ).json();
+    adminHeaders = { Authorization: `Bearer ${login.token}` };
   });
 
   afterEach(async () => {
@@ -16,6 +25,7 @@ describe('WhatsApp Agents Integration (Sub-Dealer & Owner)', () => {
     const rateRes = await ctx.app.inject({
       method: 'POST',
       url: '/api/whatsapp/simulate',
+      headers: adminHeaders,
       payload: { phone: '+919811001122', text: 'rate kya hai' },
     });
     expect(rateRes.statusCode).toBe(200);
@@ -25,6 +35,7 @@ describe('WhatsApp Agents Integration (Sub-Dealer & Owner)', () => {
     const bookRes = await ctx.app.inject({
       method: 'POST',
       url: '/api/whatsapp/simulate',
+      headers: adminHeaders,
       payload: { phone: '+919811001122', text: '2 peti chandi pakki kar do' },
     });
     expect(bookRes.statusCode).toBe(200);
@@ -33,6 +44,7 @@ describe('WhatsApp Agents Integration (Sub-Dealer & Owner)', () => {
     const confirmRes = await ctx.app.inject({
       method: 'POST',
       url: '/api/whatsapp/simulate',
+      headers: adminHeaders,
       payload: { phone: '+919811001122', text: 'HAA' },
     });
     expect(confirmRes.statusCode).toBe(200);
@@ -41,6 +53,7 @@ describe('WhatsApp Agents Integration (Sub-Dealer & Owner)', () => {
     const ledgerRes = await ctx.app.inject({
       method: 'POST',
       url: '/api/whatsapp/simulate',
+      headers: adminHeaders,
       payload: { phone: '+919811001122', text: 'mera hisab' },
     });
     expect(ledgerRes.json().reply).toContain('60.000 kg');
@@ -50,6 +63,7 @@ describe('WhatsApp Agents Integration (Sub-Dealer & Owner)', () => {
     const adjRes = await ctx.app.inject({
       method: 'POST',
       url: '/api/whatsapp/simulate',
+      headers: adminHeaders,
       payload: { phone: '+919999999999', text: 'Silver cash +100' },
     });
     expect(adjRes.statusCode).toBe(200);
