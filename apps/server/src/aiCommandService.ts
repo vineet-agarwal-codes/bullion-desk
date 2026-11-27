@@ -1,4 +1,11 @@
-import type { MetalType, Order, ScripConfig, SettlementType } from '@bullion-desk/shared';
+import {
+  replaceHindiNumbers,
+  transliterateDevanagariToHinglish,
+  type MetalType,
+  type Order,
+  type ScripConfig,
+  type SettlementType,
+} from '@bullion-desk/shared';
 import type { MarketService } from './marketService.js';
 
 export interface AiSessionContext {
@@ -44,90 +51,15 @@ export interface AiCommandResponse {
   context: AiSessionContext;
 }
 
-const HINGLISH_NUMBERS: Record<string, number> = {
-  ek: 1,
-  one: 1,
-  'एक': 1,
-  do: 2,
-  two: 2,
-  'दो': 2,
-  teen: 3,
-  three: 3,
-  'तीन': 3,
-  char: 4,
-  four: 4,
-  'चार': 4,
-  paanch: 5,
-  panch: 5,
-  five: 5,
-  'पांच': 5,
-  'पाँच': 5,
-  chhe: 6,
-  six: 6,
-  'छह': 6,
-  saat: 7,
-  seven: 7,
-  'सात': 7,
-  aath: 8,
-  eight: 8,
-  'आठ': 8,
-  nau: 9,
-  nine: 9,
-  'नौ': 9,
-  das: 10,
-  dus: 10,
-  ten: 10,
-  'दस': 10,
-  bees: 20,
-  'बीस': 20,
-  pachees: 25,
-  tees: 30,
-  pachas: 50,
-  'पचास': 50,
-  sau: 100,
-  'सौ': 100,
-  'dedh sau': 150,
-  'do sau': 200,
-  'paanch sau': 500,
-  hazar: 1000,
-  'हजार': 1000,
-};
-
-const DEVANAGARI_TO_HINGLISH: Array<[RegExp, string]> = [
-  [/चांदी|चाँदी/g, 'chandi'],
-  [/सोना/g, 'sona'],
-  [/पेटी/g, 'peti'],
-  [/चोरसा/g, 'chorsa'],
-  [/पक्की|पक्का/g, 'pakki'],
-  [/कच्चा|कच्ची/g, 'cash'],
-  [/बढ़ा|बढ़ाओ/g, 'badha'],
-  [/कम|घटा|घटाओ/g, 'kam'],
-  [/फ्रीज|बंद/g, 'freeze'],
-  [/चालू|खोलो/g, 'chalu'],
-  [/भाव|रेट/g, 'rate'],
-  [/हिसाब|बैलेंस/g, 'hisab'],
-  [/कर दो|करो/g, 'karo'],
-  [/खरीदो/g, 'buy'],
-  [/बेचो/g, 'sell'],
-  [/ग्राम/g, 'gram'],
-  [/किलो/g, 'kg'],
-];
-
 function normalizeHinglishText(raw: string): string {
-  let text = raw.toLowerCase().trim();
-  for (const [pattern, replacement] of DEVANAGARI_TO_HINGLISH) {
-    text = text.replace(pattern, ` ${replacement} `);
-  }
+  let text = transliterateDevanagariToHinglish(raw).toLowerCase().trim();
   // Protect Hindi verb endings "kar do" / "karde" before converting "do" -> 2
   text = text.replace(/\bkar\s+do\b/g, 'karo').replace(/\bkarde\b/g, 'karo');
   // Common STT phonetic corrections for bullion terms
   text = text
     .replace(/\b(petti|patti|patty|paiti)\b/g, 'peti')
     .replace(/\b(shandi|chandy|sandi)\b/g, 'chandi');
-  for (const [word, num] of Object.entries(HINGLISH_NUMBERS)) {
-    const regex = new RegExp(`(^|\\s)${word}(?=\\s|$)`, 'gi');
-    text = text.replace(regex, `$1${num}`);
-  }
+  text = replaceHindiNumbers(text);
   return text.replace(/\s+/g, ' ').trim();
 }
 

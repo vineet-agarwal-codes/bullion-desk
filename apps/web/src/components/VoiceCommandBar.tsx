@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { transliterateDevanagariToHinglish } from '@bullion-desk/shared';
 import { CheckCircle2, Mic, MicOff, Send, Sparkles, XCircle } from 'lucide-react';
 import { api } from '../api';
 
@@ -12,7 +13,6 @@ interface Props {
 
 export function VoiceCommandBar({ role, sessionId, clientId, samples, onExecuted }: Props) {
   const [text, setText] = useState('');
-  const [speechLang, setSpeechLang] = useState<'hi-IN' | 'en-IN'>('hi-IN');
   const [listening, setListening] = useState(false);
   const [preview, setPreview] = useState<{
     originalText: string;
@@ -125,7 +125,7 @@ export function VoiceCommandBar({ role, sessionId, clientId, samples, onExecuted
       start: () => void;
       stop: () => void;
     };
-    rec.lang = speechLang;
+    rec.lang = 'hi-IN';
     rec.interimResults = true;
     rec.continuous = true;
     rec.onresult = (e) => {
@@ -134,8 +134,9 @@ export function VoiceCommandBar({ role, sessionId, clientId, samples, onExecuted
         const chunk = e.results[i]?.[0]?.transcript?.trim();
         if (chunk) parts.push(chunk);
       }
-      // Always type out what the user is speaking without auto-executing
-      setText(parts.join(' '));
+      // Transliterate any Devanagari output into clean Hinglish and type into input box
+      const hinglish = transliterateDevanagariToHinglish(parts.join(' '));
+      setText(hinglish);
     };
     rec.onerror = () => setListening(false);
     rec.onend = () => setListening(false);
@@ -159,17 +160,8 @@ export function VoiceCommandBar({ role, sessionId, clientId, samples, onExecuted
               : 'AI Hinglish Voice Sauda Booking'}
           </span>
         </div>
-        <span className="flex items-center gap-2 text-[11px] text-slate-400">
-          <select
-            value={speechLang}
-            onChange={(e) => setSpeechLang(e.target.value as 'hi-IN' | 'en-IN')}
-            className="rounded border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-[10px] text-slate-300"
-            title="Speech Recognition Language"
-          >
-            <option value="hi-IN">Hindi / Hinglish (hi-IN)</option>
-            <option value="en-IN">English India (en-IN)</option>
-          </select>
-          <span>{listening ? 'Listening... (click mic to stop)' : `Session: ${sessionId}`}</span>
+        <span className="text-[11px] text-slate-400">
+          {listening ? 'Listening... (click mic to stop)' : `Session: ${sessionId}`}
         </span>
       </div>
 
