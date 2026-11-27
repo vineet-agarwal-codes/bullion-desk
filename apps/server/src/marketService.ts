@@ -395,7 +395,8 @@ export class MarketService {
         (order.side === 'SELL' && quote.buyRate >= order.limitRate);
 
       if (shouldFill) {
-        const fillRate = order.side === 'BUY' ? quote.sellRate : quote.buyRate;
+        // Fill at the customer's exact limitRate shown/set on screen (Groww/Zerodha style)
+        const fillRate = order.limitRate;
         const { gstAmount, totalInr } = calculateOrderFinancials(
           order.qtyUnits,
           fillRate,

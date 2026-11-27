@@ -148,6 +148,6 @@ describe('MarketService & API Integration', () => {
     ).json();
     const updated = orders.find((o: { id: string }) => o.id === order.id);
     expect(updated.status).toBe('CONFIRMED');
-    expect(updated.quotedRate).toBe(137950);
+    expect(updated.quotedRate).toBe(138000);
   });
 });

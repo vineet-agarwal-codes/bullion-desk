@@ -396,21 +396,28 @@ export function ClientBoard({
             )}
 
             {(() => {
-              const rate =
-                orderType === 'LIMIT'
-                  ? Number(limitRate) || 0
-                  : ticket.side === 'BUY'
-                    ? ticket.quote.sellRate
-                    : ticket.quote.buyRate;
-              const fin = calculateOrderFinancials(qtyUnits, rate, ticket.quote.gstPercent);
+              const liveQuote =
+                quotes.find((q) => q.scripId === ticket.quote.scripId) ?? ticket.quote;
+              const liveMarketRate =
+                ticket.side === 'BUY' ? liveQuote.sellRate : liveQuote.buyRate;
+              const rate = orderType === 'LIMIT' ? Number(limitRate) || 0 : liveMarketRate;
+              const fin = calculateOrderFinancials(qtyUnits, rate, liveQuote.gstPercent);
               return (
                 <div className="rounded-lg bg-slate-950 p-3 text-xs space-y-1 border border-slate-800">
                   <div className="flex justify-between">
-                    <span className="text-slate-400">Rate / Unit:</span>
+                    <span className="text-slate-400">
+                      {orderType === 'LIMIT' ? 'Your Limit Rate / Unit:' : 'Live Market Rate / Unit:'}
+                    </span>
                     <span className="font-mono text-slate-200">₹{rate.toLocaleString('en-IN')}</span>
                   </div>
+                  {orderType === 'LIMIT' && (
+                    <div className="flex justify-between text-[11px] text-slate-500">
+                      <span>Current Live Rate:</span>
+                      <span className="font-mono">₹{liveMarketRate.toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
-                    <span className="text-slate-400">GST ({ticket.quote.gstPercent}%):</span>
+                    <span className="text-slate-400">GST ({liveQuote.gstPercent}%):</span>
                     <span className="font-mono text-slate-200">
                       ₹{fin.gstAmount.toLocaleString('en-IN')}
                     </span>
@@ -514,14 +521,30 @@ export function ClientBoard({
                             Cancel
                           </button>
                         </>
+                      ) : o.status === 'PENDING_LIMIT' ? (
+                        <>
+                          <span className="rounded bg-sky-500/20 px-1.5 py-0.5 font-semibold text-sky-300">
+                            OPEN LIMIT
+                          </span>
+                          <button
+                            onClick={() => openEditTicket(o)}
+                            className="rounded bg-slate-800 px-2 py-0.5 text-amber-300 hover:bg-slate-700"
+                          >
+                            Modify
+                          </button>
+                          <button
+                            onClick={() => handleCancel(o.id)}
+                            className="rounded bg-slate-800 px-2 py-0.5 text-slate-300 hover:bg-slate-700"
+                          >
+                            Cancel
+                          </button>
+                        </>
                       ) : (
                         <span
                           className={`rounded px-1.5 py-0.5 font-semibold ${
                             o.status === 'CONFIRMED'
                               ? 'bg-emerald-500/20 text-emerald-300'
-                              : o.status === 'PENDING_LIMIT'
-                                ? 'bg-sky-500/20 text-sky-300'
-                                : 'bg-slate-700 text-slate-400'
+                              : 'bg-slate-700 text-slate-400'
                           }`}
                         >
                           {o.status}
