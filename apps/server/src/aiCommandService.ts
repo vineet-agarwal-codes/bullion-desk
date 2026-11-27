@@ -516,6 +516,73 @@ export class AiCommandService {
           context: nextCtx,
         };
       }
+      case 'QUERY_RATE': {
+        const res = executeMcpTool(
+          this.market,
+          'get_live_rates',
+          { metal: parsed.metal, settlement: parsed.settlement },
+          mcpUser,
+          options.source ?? 'VOICE'
+        );
+        const data = res.result as {
+          isFrozen: boolean;
+          quotes: Array<{ name: string; buyRate: number; sellRate: number; settlement: string }>;
+        };
+        if (data.isFrozen) {
+          return {
+            parsed,
+            executed: true,
+            message: 'Market is currently FROZEN (Call for Rate).',
+            context: nextCtx,
+          };
+        }
+        const lines = data.quotes
+          .slice(0, 6)
+          .map(
+            (q) =>
+              `• ${q.name}: Buy ₹${q.buyRate.toLocaleString('en-IN')} | Sell ₹${q.sellRate.toLocaleString('en-IN')}`
+          );
+        return {
+          parsed,
+          executed: true,
+          message: `Live Rates (${parsed.metal ?? 'Gold & Silver'}):\n${lines.join('\n')}`,
+          context: nextCtx,
+        };
+      }
+      case 'QUERY_POSITION': {
+        if (role === 'CLIENT') {
+          const res = executeMcpTool(this.market, 'get_client_ledger', {}, mcpUser, options.source ?? 'VOICE');
+          const c = res.result as {
+            firmName: string;
+            cashBalanceInr: number;
+            metalBalanceGoldGrams: number;
+            metalBalanceSilverGrams: number;
+          };
+          return {
+            parsed,
+            executed: true,
+            message: `Dual Ledger (${c.firmName}): Cash ₹${c.cashBalanceInr.toLocaleString('en-IN')} | Gold ${c.metalBalanceGoldGrams.toFixed(2)}g | Silver ${(c.metalBalanceSilverGrams / 1000).toFixed(3)}kg`,
+            context: nextCtx,
+          };
+        }
+        const res = executeMcpTool(this.market, 'get_net_positions', {}, mcpUser, options.source ?? 'VOICE');
+        const positions = res.result as Array<{
+          metal: string;
+          settlement: string;
+          netGrams: number;
+          totalTurnoverInr: number;
+        }>;
+        const msg =
+          positions.length === 0
+            ? 'No confirmed open positions today.'
+            : positions
+                .map(
+                  (p) =>
+                    `${p.metal} (${p.settlement}): Net ${p.netGrams}g | Turnover ₹${p.totalTurnoverInr.toLocaleString('en-IN')}`
+                )
+                .join('\n');
+        return { parsed, executed: true, message: msg, context: nextCtx };
+      }
       default:
         return {
           parsed,

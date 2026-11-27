@@ -79,6 +79,25 @@ export function VoiceCommandBar({
         return;
       }
 
+      // Read-only queries execute immediately like an AI assistant (no confirmation step needed)
+      if (res.parsed.intent === 'QUERY_RATE' || res.parsed.intent === 'QUERY_POSITION') {
+        const execRes = await api.sendAiCommand({
+          text: trimmed,
+          sessionId,
+          role,
+          clientId,
+          autoExecute: true,
+        });
+        setResult({
+          message: execRes.message,
+          usedContext: execRes.parsed.usedContext,
+          executed: execRes.executed,
+        });
+        setPreview(null);
+        setText('');
+        return;
+      }
+
       setPreview({
         originalText: trimmed,
         intent: res.parsed.intent,
@@ -289,11 +308,11 @@ export function VoiceCommandBar({
         <button
           data-testid={`voice-submit-${role.toLowerCase()}`}
           type="submit"
-          disabled={loading || !text.trim()}
+          disabled={loading || transcribing || listening || !text.trim()}
           className="flex items-center gap-1.5 rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50"
         >
           <Send className="h-3.5 w-3.5" />
-          Execute
+          {transcribing ? 'Refining...' : 'Execute'}
         </button>
       </form>
 
@@ -360,7 +379,7 @@ export function VoiceCommandBar({
       {result && (
         <div
           data-testid={`voice-result-${role.toLowerCase()}`}
-          className={`rounded-lg px-3 py-2 text-xs border ${
+          className={`rounded-lg px-3 py-2 text-xs border whitespace-pre-line ${
             result.executed
               ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
               : 'border-amber-500/30 bg-amber-500/10 text-amber-200'

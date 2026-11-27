@@ -54,6 +54,9 @@ export function ClientBoard({
   const clientOrders = orders.filter(
     (o) => o.clientId === selectedClient?.id && o.status !== 'CANCELLED'
   );
+  const openOrders = clientOrders.filter(
+    (o) => o.status === 'PENDING_LIMIT' || o.status === 'PROCESSING'
+  );
 
   // Show in-app notification toast when an order transitions to CONFIRMED
   useEffect(() => {
@@ -264,6 +267,75 @@ export function ClientBoard({
         >
           <ShieldAlert className="h-4 w-4 shrink-0" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {/* Always-visible Open Orders Panel at the top */}
+      {openOrders.length > 0 && (
+        <div
+          data-testid="open-orders-panel"
+          className="rounded-xl border border-sky-500/30 bg-slate-900/80 p-4 space-y-2.5"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-sky-400">
+              Open Orders ({openOrders.length})
+            </span>
+          </div>
+          <div className="space-y-2">
+            {openOrders.map((o) => (
+              <div
+                key={o.id}
+                data-testid={`open-order-${o.dealNumber}`}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950/90 px-3.5 py-2.5 text-xs"
+              >
+                <div>
+                  <span className="font-mono font-bold text-slate-200">#{o.dealNumber}</span>{' '}
+                  <span
+                    className={
+                      o.side === 'BUY' ? 'font-bold text-emerald-400' : 'font-bold text-rose-400'
+                    }
+                  >
+                    {o.side}
+                  </span>{' '}
+                  <span className="font-medium text-slate-100">
+                    {o.qtyUnits} × {o.scripCode}
+                  </span>{' '}
+                  <span className="text-slate-400">
+                    ({o.orderType} @ ₹{o.quotedRate.toLocaleString('en-IN')})
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`rounded px-2 py-0.5 font-semibold ${
+                      o.status === 'PROCESSING'
+                        ? 'bg-amber-500/20 text-amber-300 animate-pulse'
+                        : 'bg-sky-500/20 text-sky-300'
+                    }`}
+                  >
+                    {o.status === 'PENDING_LIMIT' ? 'OPEN LIMIT' : o.status}
+                  </span>
+                  {o.status === 'PENDING_LIMIT' && (
+                    <>
+                      <button
+                        data-testid={`modify-open-order-${o.dealNumber}`}
+                        onClick={() => openEditTicket(o)}
+                        className="rounded bg-slate-800 px-2.5 py-1 font-medium text-amber-300 hover:bg-slate-700"
+                      >
+                        Modify
+                      </button>
+                      <button
+                        data-testid={`cancel-open-order-${o.dealNumber}`}
+                        onClick={() => handleCancel(o.id)}
+                        className="rounded bg-slate-800 px-2.5 py-1 font-medium text-slate-300 hover:bg-slate-700"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
