@@ -9,6 +9,9 @@ describe('transliterateDevanagariToHinglish', () => {
     expect(transliterateDevanagariToHinglish('गोल्ड 995 पचास रुपये बढ़ाओ')).toBe(
       'gold 995 pachas rupaye badhao'
     );
+    expect(transliterateDevanagariToHinglish('डेढ़ पेटी चांदी पक्की कर दो')).toBe(
+      'dedh peti chandi pakki kar do'
+    );
   });
 
   it('preserves existing English/Hinglish text', () => {
@@ -23,5 +26,6 @@ describe('replaceHindiNumbers', () => {
     expect(replaceHindiNumbers('dedh sau kam')).toBe('150 kam');
     expect(replaceHindiNumbers('ek hazar do sau rupaye')).toBe('1200 rupaye');
     expect(replaceHindiNumbers('sadhe teen kg')).toBe('3.5 kg');
+    expect(replaceHindiNumbers('dedha peti chandi')).toBe('1.5 peti chandi');
   });
 });

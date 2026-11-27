@@ -47,6 +47,11 @@ const WORD_MAP: Array<[RegExp, string]> = [
   [/पचास/g, 'pachas'],
   [/सौ/g, 'sau'],
   [/हजार|हज़ार/g, 'hazar'],
+  [/डेढ़|डेढ/g, 'dedh'],
+  [/ढाई/g, 'dhai'],
+  [/साढ़े|साढे/g, 'sadhe'],
+  [/सवा/g, 'sawa'],
+  [/पौने/g, 'paune'],
 ];
 
 const VOWELS: Record<string, string> = {
@@ -100,7 +105,8 @@ const DEVANAGARI_DIGITS: Record<string, string> = {
  * while preserving existing English/Latin text and numbers.
  */
 export function transliterateDevanagariToHinglish(input: string): string {
-  let text = input;
+  // Normalize nukta-decomposed characters before transliterating
+  let text = input.replace(/़/g, '');
 
   // 1. Replace common bullion/Hindi vocabulary cleanly first
   for (const [pattern, replacement] of WORD_MAP) {
@@ -192,7 +198,7 @@ export function replaceHindiNumbers(input: string): string {
     const t = tokens[i];
 
     // Fractional prefixes: dedh (1.5), dhai (2.5), sadhe X (X + 0.5)
-    if (t === 'dedh') {
+    if (t === 'dedh' || t === 'dedha') {
       const mult = MULTIPLIERS[tokens[i + 1] ?? ''];
       if (mult) {
         out.push(String(1.5 * mult));
