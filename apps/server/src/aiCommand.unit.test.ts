@@ -62,4 +62,16 @@ describe('AiCommandService Unit Tests (Hinglish & Context)', () => {
     expect(r.order?.totalGrams).toBe(60000); // 2 * 30kg
     expect(r.order?.source).toBe('VOICE');
   });
+
+  it('parses "Dus peti chandi pakki kar do" and Devanagari Hindi "दस पेटी चांदी पक्की कर दो"', () => {
+    const r1 = ai.parseCommand('Dus peti chandi pakki kar do', 'sess-dus', 'CLIENT');
+    expect(r1.intent).toBe('PLACE_ORDER');
+    expect(r1.qtyUnits).toBe(10);
+    expect(r1.targetScripIds[0]).toBe('silver-999-peti-cash');
+
+    const r2 = ai.parseCommand('दस पेटी चांदी पक्की कर दो', 'sess-dev', 'CLIENT');
+    expect(r2.intent).toBe('PLACE_ORDER');
+    expect(r2.qtyUnits).toBe(10);
+    expect(r2.targetScripIds[0]).toBe('silver-999-peti-cash');
+  });
 });
