@@ -9,6 +9,7 @@ import {
 import type { MarketService } from './marketService.js';
 import { executeMcpTool } from './mcpTools.js';
 import { parseIntentWithAgy } from './llmRouter.js';
+import { formatBullionRatesMessage } from './rateFormatter.js';
 
 export interface AiSessionContext {
   lastMetal?: MetalType;
@@ -526,7 +527,15 @@ export class AiCommandService {
         );
         const data = res.result as {
           isFrozen: boolean;
-          quotes: Array<{ name: string; buyRate: number; sellRate: number; settlement: string }>;
+          tick: { goldMcx: number; silverMcx: number };
+          quotes: Array<{
+            name: string;
+            metal: 'GOLD' | 'SILVER';
+            settlement: 'RTGS' | 'CASH';
+            gstPercent: number;
+            buyRate: number;
+            sellRate: number;
+          }>;
         };
         if (data.isFrozen) {
           return {
@@ -536,16 +545,16 @@ export class AiCommandService {
             context: nextCtx,
           };
         }
-        const lines = data.quotes
-          .slice(0, 6)
-          .map(
-            (q) =>
-              `• ${q.name}: Buy ₹${q.buyRate.toLocaleString('en-IN')} | Sell ₹${q.sellRate.toLocaleString('en-IN')}`
-          );
         return {
           parsed,
           executed: true,
-          message: `Live Rates (${parsed.metal ?? 'Gold & Silver'}):\n${lines.join('\n')}`,
+          message: formatBullionRatesMessage(data.quotes, {
+            header: `Live Rates (${parsed.metal ?? 'Gold & Silver'})`,
+            tick: data.tick,
+            metal: parsed.metal,
+            settlement: parsed.settlement,
+            markdown: false,
+          }),
           context: nextCtx,
         };
       }

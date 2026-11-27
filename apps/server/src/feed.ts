@@ -20,7 +20,7 @@ async function fetchYahooPrice(symbol: string): Promise<number> {
 async function fetchGrowwMcxSpot(): Promise<{ goldMcx: number; silverMcx: number }> {
   const res = await fetch('https://groww.in/commodities', {
     headers: { 'User-Agent': 'Mozilla/5.0' },
-    signal: AbortSignal.timeout(6000),
+    signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) throw new Error(`Groww commodities HTTP ${res.status}`);
   const html = await res.text();
@@ -43,6 +43,7 @@ export class McxFeedService {
   private currentTick: McxTick;
   private timer: NodeJS.Timeout | null = null;
   private liveSyncTimer: NodeJS.Timeout | null = null;
+  private lastLiveMcxAt = 0;
   private listeners: Array<(tick: McxTick) => void> = [];
 
   constructor(initialTick?: Partial<McxTick>) {
@@ -88,12 +89,18 @@ export class McxFeedService {
   async syncLiveParity(): Promise<McxTick | null> {
     try {
       const mcx = await fetchGrowwMcxSpot();
+      this.lastLiveMcxAt = Date.now();
       return this.setTick({
         goldMcx: mcx.goldMcx,
         silverMcx: mcx.silverMcx,
         source: 'LIVE_MCX',
       });
     } catch {
+      // Keep the last live MCX tick if Groww had a brief transient error so Silver/Gold
+      // don't jump to COMEX parity (~₹12k lower) for a single failed poll cycle.
+      if (this.currentTick.source === 'LIVE_MCX' && Date.now() - this.lastLiveMcxAt < 5 * 60_000) {
+        return null;
+      }
       try {
         const [gc, si, usdInr] = await Promise.all([
           fetchYahooPrice('GC=F'),

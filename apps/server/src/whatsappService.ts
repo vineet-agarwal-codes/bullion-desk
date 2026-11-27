@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { AiCommandService } from './aiCommandService.js';
 import type { MarketService } from './marketService.js';
+import { formatBullionRatesMessage } from './rateFormatter.js';
 
 export interface WhatsAppMessage {
   id: string;
@@ -350,14 +351,12 @@ export class WhatsAppAgentService {
     if (metal) quotes = quotes.filter((q) => q.metal === metal);
     if (settlement) quotes = quotes.filter((q) => q.settlement === settlement);
 
-    const lines = quotes.slice(0, 6).map(
-      (q) =>
-        `• *${q.name}*: Buy ₹${q.buyRate.toLocaleString('en-IN')} | Sell ₹${q.sellRate.toLocaleString('en-IN')}`
-    );
-    return (
-      `📈 *Live BullionDesk Rates (${group})*\n` +
-      `MCX Gold: ₹${state.tick.goldMcx.toLocaleString('en-IN')} | MCX Silver: ₹${state.tick.silverMcx.toLocaleString('en-IN')}\n\n` +
-      lines.join('\n')
-    );
+    return formatBullionRatesMessage(quotes, {
+      header: `📈 *Live BullionDesk Rates (${group})*`,
+      tick: state.tick,
+      metal,
+      settlement,
+      markdown: true,
+    });
   }
 }
