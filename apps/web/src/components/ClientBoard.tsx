@@ -9,7 +9,7 @@ import type {
   SettlementType,
 } from '@bullion-desk/shared';
 import { calculateOrderFinancials } from '@bullion-desk/shared';
-import { CheckCircle2, Clock, Coins, ShieldAlert } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Clock, Coins, ShieldAlert, Wallet } from 'lucide-react';
 import { api } from '../api';
 import { VoiceCommandBar } from './VoiceCommandBar';
 
@@ -43,6 +43,7 @@ export function ClientBoard({
   const [orderType, setOrderType] = useState<OrderType>('MARKET');
   const [qtyUnits, setQtyUnits] = useState<number>(1);
   const [limitRate, setLimitRate] = useState<string>('');
+  const [selectedOrderDetail, setSelectedOrderDetail] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ title: string; detail: string; kind: 'INFO' | 'SUCCESS' } | null>(
     null
@@ -186,6 +187,57 @@ export function ClientBoard({
         onExecuted={() => onOrderChanged()}
         onOpenOrderTicket={openDraftTicket}
       />
+      {/* Dual Ledger (Khata) Summary Strip on Top */}
+      {selectedClient && (
+        <div
+          data-testid="khata-top-panel"
+          className="grid gap-3 sm:grid-cols-3 rounded-xl border border-amber-500/25 bg-slate-900/80 p-4"
+        >
+          <div className="flex items-center gap-3 rounded-lg bg-slate-950/80 px-4 py-3 border border-slate-800">
+            <Wallet className="h-5 w-5 text-emerald-400 shrink-0" />
+            <div>
+              <div className="text-[11px] uppercase tracking-wider text-slate-400">
+                Khata Cash Balance
+              </div>
+              <div
+                className="font-mono text-base font-bold text-slate-100"
+                data-testid="client-cash-balance"
+              >
+                ₹{selectedClient.cashBalanceInr.toLocaleString('en-IN')}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 rounded-lg bg-slate-950/80 px-4 py-3 border border-slate-800">
+            <Coins className="h-5 w-5 text-amber-400 shrink-0" />
+            <div>
+              <div className="text-[11px] uppercase tracking-wider text-slate-400">
+                Fine Gold (999)
+              </div>
+              <div
+                className="font-mono text-base font-bold text-amber-400"
+                data-testid="client-gold-balance"
+              >
+                {selectedClient.metalBalanceGoldGrams.toFixed(2)} g
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 rounded-lg bg-slate-950/80 px-4 py-3 border border-slate-800">
+            <Coins className="h-5 w-5 text-slate-300 shrink-0" />
+            <div>
+              <div className="text-[11px] uppercase tracking-wider text-slate-400">
+                Fine Silver (999)
+              </div>
+              <div
+                className="font-mono text-base font-bold text-slate-200"
+                data-testid="client-silver-balance"
+              >
+                {(selectedClient.metalBalanceSilverGrams / 1000).toFixed(3)} kg
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Client Context & Settlement Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
         <div className="flex flex-wrap items-center gap-3">
@@ -548,111 +600,223 @@ export function ClientBoard({
         </div>
       )}
 
-      {/* Client Dual Ledger & Order History */}
+      {/* Zerodha / Groww Style Orders Book */}
       {selectedClient && (
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-2">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Dual Ledger — {selectedClient.name}
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+          <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-300">
+              Order Book & Recent Saudas ({clientOrders.length})
             </div>
-            <div className="space-y-1.5 text-sm">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Cash Balance:</span>
-                <span className="font-mono font-semibold text-slate-100" data-testid="client-cash-balance">
-                  ₹{selectedClient.cashBalanceInr.toLocaleString('en-IN')}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Fine Gold (999):</span>
-                <span className="font-mono font-semibold text-amber-400" data-testid="client-gold-balance">
-                  {selectedClient.metalBalanceGoldGrams.toFixed(2)} g
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Fine Silver (999):</span>
-                <span className="font-mono font-semibold text-slate-200" data-testid="client-silver-balance">
-                  {(selectedClient.metalBalanceSilverGrams / 1000).toFixed(3)} kg
-                </span>
-              </div>
-            </div>
+            <div className="text-[11px] text-slate-500">Click any order for full breakdown</div>
           </div>
 
-          <div className="md:col-span-2 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-              Recent Saudas ({clientOrders.length})
-            </div>
-            <div className="max-h-48 overflow-y-auto space-y-1.5 text-xs">
-              {clientOrders.length === 0 ? (
-                <div className="text-slate-500 py-4 text-center">No orders placed yet.</div>
-              ) : (
-                clientOrders.map((o) => (
+          {clientOrders.length === 0 ? (
+            <div className="text-slate-500 py-8 text-center text-xs">No orders placed yet.</div>
+          ) : (
+            <div className="divide-y divide-slate-800/70">
+              {clientOrders.map((o) => {
+                const timeStr = new Date(o.createdAt).toLocaleString('en-IN', {
+                  day: '2-digit',
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                });
+                return (
                   <div
                     key={o.id}
                     data-testid={`order-item-${o.dealNumber}`}
-                    className="flex items-center justify-between rounded-lg bg-slate-950/80 px-3 py-2 border border-slate-800/80"
+                    onClick={() => setSelectedOrderDetail(o)}
+                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-xs hover:bg-slate-800/40 cursor-pointer transition"
                   >
-                    <div>
-                      <span className="font-mono font-bold text-slate-300">#{o.dealNumber}</span>{' '}
+                    <div className="flex items-center gap-3 min-w-[220px]">
                       <span
-                        className={o.side === 'BUY' ? 'text-emerald-400 font-semibold' : 'text-rose-400 font-semibold'}
+                        className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
+                          o.side === 'BUY'
+                            ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
+                            : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                        }`}
                       >
                         {o.side}
-                      </span>{' '}
-                      <span>
-                        {o.qtyUnits} × {o.scripCode}
                       </span>
+                      <div>
+                        <div className="font-semibold text-slate-100">
+                          {o.scripCode}{' '}
+                          <span className="font-mono text-slate-400">× {o.qtyUnits}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          #{o.dealNumber} • {timeStr} • {o.orderType} • via {o.source}
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono">₹{o.quotedRate.toLocaleString('en-IN')}</span>
-                      {o.status === 'PENDING_CONFIRM' ? (
-                        <>
-                          <button
-                            onClick={() => handleConfirm(o.id)}
-                            className="rounded bg-emerald-500 px-2 py-0.5 font-bold text-slate-950 hover:bg-emerald-400"
+
+                    <div className="flex items-center gap-4">
+                      <div className="text-right font-mono">
+                        <div className="font-semibold text-slate-100">
+                          ₹{o.quotedRate.toLocaleString('en-IN')}
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          Total ₹{o.totalInr.toLocaleString('en-IN')}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        {o.status === 'PENDING_LIMIT' ? (
+                          <>
+                            <span className="rounded bg-sky-500/20 px-2 py-0.5 font-semibold text-sky-300">
+                              OPEN LIMIT
+                            </span>
+                            <button
+                              onClick={() => openEditTicket(o)}
+                              className="rounded bg-slate-800 px-2 py-0.5 text-amber-300 hover:bg-slate-700"
+                            >
+                              Modify
+                            </button>
+                            <button
+                              onClick={() => handleCancel(o.id)}
+                              className="rounded bg-slate-800 px-2 py-0.5 text-slate-300 hover:bg-slate-700"
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <span
+                            className={`rounded px-2 py-0.5 font-semibold ${
+                              o.status === 'CONFIRMED'
+                                ? 'bg-emerald-500/20 text-emerald-300'
+                                : o.status === 'PROCESSING'
+                                  ? 'bg-amber-500/20 text-amber-300'
+                                  : 'bg-slate-700 text-slate-400'
+                            }`}
                           >
-                            Confirm
-                          </button>
-                          <button
-                            onClick={() => handleCancel(o.id)}
-                            className="rounded bg-slate-800 px-2 py-0.5 text-slate-300 hover:bg-slate-700"
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      ) : o.status === 'PENDING_LIMIT' ? (
-                        <>
-                          <span className="rounded bg-sky-500/20 px-1.5 py-0.5 font-semibold text-sky-300">
-                            OPEN LIMIT
+                            {o.status}
                           </span>
-                          <button
-                            onClick={() => openEditTicket(o)}
-                            className="rounded bg-slate-800 px-2 py-0.5 text-amber-300 hover:bg-slate-700"
-                          >
-                            Modify
-                          </button>
-                          <button
-                            onClick={() => handleCancel(o.id)}
-                            className="rounded bg-slate-800 px-2 py-0.5 text-slate-300 hover:bg-slate-700"
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      ) : (
-                        <span
-                          className={`rounded px-1.5 py-0.5 font-semibold ${
-                            o.status === 'CONFIRMED'
-                              ? 'bg-emerald-500/20 text-emerald-300'
-                              : 'bg-slate-700 text-slate-400'
-                          }`}
-                        >
-                          {o.status}
-                        </span>
-                      )}
+                        )}
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-slate-600" />
                     </div>
                   </div>
-                ))
-              )}
+                );
+              })}
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Order Detail Modal (Zerodha / Groww style) */}
+      {selectedOrderDetail && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setSelectedOrderDetail(null)}
+        >
+          <div
+            data-testid="order-detail-modal"
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl space-y-4"
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`rounded px-2 py-0.5 text-[10px] font-bold ${
+                      selectedOrderDetail.side === 'BUY'
+                        ? 'bg-sky-500/20 text-sky-300'
+                        : 'bg-rose-500/20 text-rose-300'
+                    }`}
+                  >
+                    {selectedOrderDetail.side}
+                  </span>
+                  <h3 className="text-base font-bold text-slate-100">
+                    Deal #{selectedOrderDetail.dealNumber} — {selectedOrderDetail.scripCode}
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {selectedOrderDetail.clientName} • {selectedOrderDetail.settlement}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedOrderDetail(null)}
+                className="text-slate-400 hover:text-slate-200 text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="rounded-xl bg-slate-950 p-4 border border-slate-800 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Status</span>
+                <span className="font-bold text-emerald-300">{selectedOrderDetail.status}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Order Type / Channel</span>
+                <span className="text-slate-200">
+                  {selectedOrderDetail.orderType} via {selectedOrderDetail.source}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Placed At</span>
+                <span className="font-mono text-slate-200">
+                  {new Date(selectedOrderDetail.createdAt).toLocaleString('en-IN')}
+                </span>
+              </div>
+              {selectedOrderDetail.confirmedAt && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Confirmed At</span>
+                  <span className="font-mono text-slate-200">
+                    {new Date(selectedOrderDetail.confirmedAt).toLocaleString('en-IN')}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-slate-800 pt-2">
+                <span className="text-slate-400">Quantity / Weight</span>
+                <span className="font-mono text-slate-200">
+                  {selectedOrderDetail.qtyUnits} units ({selectedOrderDetail.totalGrams} g)
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Booked Rate / Unit</span>
+                <span className="font-mono text-slate-200">
+                  ₹{selectedOrderDetail.quotedRate.toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">GST</span>
+                <span className="font-mono text-slate-200">
+                  ₹{selectedOrderDetail.gstAmount.toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="flex justify-between border-t border-slate-800 pt-2 font-bold text-amber-400 text-sm">
+                <span>Total INR</span>
+                <span className="font-mono">
+                  ₹{selectedOrderDetail.totalInr.toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+
+            {selectedOrderDetail.status === 'PENDING_LIMIT' && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const o = selectedOrderDetail;
+                    setSelectedOrderDetail(null);
+                    openEditTicket(o);
+                  }}
+                  className="flex-1 rounded-xl bg-amber-500 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400"
+                >
+                  Modify Limit Order
+                </button>
+                <button
+                  onClick={() => {
+                    const id = selectedOrderDetail.id;
+                    setSelectedOrderDetail(null);
+                    handleCancel(id);
+                  }}
+                  className="flex-1 rounded-xl border border-slate-700 bg-slate-800 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700"
+                >
+                  Cancel Order
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

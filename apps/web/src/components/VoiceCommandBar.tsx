@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { transliterateDevanagariToHinglish } from '@bullion-desk/shared';
-import { CheckCircle2, Mic, MicOff, Send, Sparkles, XCircle } from 'lucide-react';
+import { CheckCircle2, Loader2, Mic, MicOff, Send, Sparkles, XCircle } from 'lucide-react';
 import { api } from '../api';
 
 interface Props {
@@ -46,11 +46,14 @@ export function VoiceCommandBar({
   const audioChunksRef = useRef<Blob[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  const isBusy = loading || transcribing || listening;
+
   const previewCommand = async (cmdText: string) => {
     const trimmed = cmdText.trim();
-    if (!trimmed) return;
+    if (!trimmed || isBusy) return;
     setLoading(true);
     setResult(null);
+    setPreview(null);
     try {
       const res = await api.sendAiCommand({
         text: trimmed,
@@ -60,7 +63,7 @@ export function VoiceCommandBar({
         autoExecute: false,
       });
 
-      // For sub-dealer order commands, open the Order Ticket Modal pre-filled so they only confirm once!
+      // For sub-dealer order commands, open the Order Ticket Modal pre-filled so they only confirm once
       if (
         role === 'CLIENT' &&
         res.parsed.intent === 'PLACE_ORDER' &&
@@ -74,7 +77,6 @@ export function VoiceCommandBar({
           qtyUnits: res.parsed.qtyUnits ?? 1,
           limitRate: res.parsed.limitRate,
         });
-        setPreview(null);
         setText('');
         return;
       }
@@ -93,7 +95,6 @@ export function VoiceCommandBar({
           usedContext: execRes.parsed.usedContext,
           executed: execRes.executed,
         });
-        setPreview(null);
         setText('');
         return;
       }
@@ -116,7 +117,7 @@ export function VoiceCommandBar({
   };
 
   const confirmExecute = async () => {
-    if (!preview) return;
+    if (!preview || isBusy) return;
     setLoading(true);
     try {
       const res = await api.sendAiCommand({
@@ -154,6 +155,8 @@ export function VoiceCommandBar({
       setListening(false);
       return;
     }
+
+    if (loading || transcribing) return;
 
     setPreview(null);
     setResult(null);
@@ -248,6 +251,8 @@ export function VoiceCommandBar({
     }
   };
 
+  const buttonLabel = transcribing ? 'Refining...' : loading ? 'Processing...' : 'Execute';
+
   return (
     <div
       data-testid={`voice-bar-${role.toLowerCase()}`}
@@ -259,7 +264,7 @@ export function VoiceCommandBar({
           <span>
             {role === 'DEALER'
               ? 'AI Voice & Hinglish Desk Command (Context-Aware)'
-              : 'AI Hinglish Voice Sauda Booking'}
+              : 'AI Hinglish Voice Sauda & Rate Assistant'}
           </span>
         </div>
         <span className="text-[11px] text-slate-400">
@@ -267,7 +272,9 @@ export function VoiceCommandBar({
             ? 'Recording... (click mic to stop)'
             : transcribing
               ? 'Refining Hinglish via AI Audio STT...'
-              : `Session: ${sessionId}`}
+              : loading
+                ? 'Processing with AI Agent...'
+                : `Session: ${sessionId}`}
         </span>
       </div>
 
@@ -281,7 +288,8 @@ export function VoiceCommandBar({
         <button
           type="button"
           onClick={toggleMic}
-          className={`flex items-center justify-center rounded-lg px-3 py-2 transition ${
+          disabled={loading || transcribing}
+          className={`flex items-center justify-center rounded-lg px-3 py-2 transition disabled:opacity-50 ${
             listening
               ? 'bg-rose-500 text-white animate-pulse'
               : 'border border-slate-700 bg-slate-950 text-amber-400 hover:bg-slate-800'
@@ -296,23 +304,28 @@ export function VoiceCommandBar({
           data-testid={`voice-input-${role.toLowerCase()}`}
           type="text"
           value={text}
+          disabled={loading || transcribing}
           onChange={(e) => setText(e.target.value)}
           placeholder={
             role === 'DEALER'
               ? 'Speak or type: "Silver cash 100 badha do" then click Execute'
-              : 'Speak or type: "2 peti chandi pakki kar do" then click Execute'
+              : 'Speak or type: "bhav kya chal raha hai" or "2 peti chandi pakki kar do"'
           }
-          className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+          className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none disabled:opacity-60"
         />
 
         <button
           data-testid={`voice-submit-${role.toLowerCase()}`}
           type="submit"
-          disabled={loading || transcribing || listening || !text.trim()}
+          disabled={isBusy || !text.trim()}
           className="flex items-center gap-1.5 rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50"
         >
-          <Send className="h-3.5 w-3.5" />
-          {transcribing ? 'Refining...' : 'Execute'}
+          {loading || transcribing ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Send className="h-3.5 w-3.5" />
+          )}
+          {buttonLabel}
         </button>
       </form>
 
@@ -321,18 +334,19 @@ export function VoiceCommandBar({
           <button
             key={s}
             type="button"
+            disabled={isBusy}
             onClick={() => {
               setText(s);
               previewCommand(s);
             }}
-            className="rounded-full border border-slate-700/80 bg-slate-950/70 px-2.5 py-1 text-[11px] text-slate-300 hover:border-amber-500/50 hover:text-amber-300"
+            className="rounded-full border border-slate-700/80 bg-slate-950/70 px-2.5 py-1 text-[11px] text-slate-300 hover:border-amber-500/50 hover:text-amber-300 disabled:opacity-40"
           >
             “{s}”
           </button>
         ))}
       </div>
 
-      {/* Confirmation Preview Step before Executing */}
+      {/* Confirmation Preview Step before Executing Admin/Complex Mutations */}
       {preview && (
         <div
           data-testid={`voice-preview-${role.toLowerCase()}`}
@@ -353,9 +367,9 @@ export function VoiceCommandBar({
             <button
               type="button"
               data-testid={`voice-confirm-${role.toLowerCase()}`}
-              disabled={loading}
+              disabled={isBusy}
               onClick={confirmExecute}
-              className="flex items-center gap-1 rounded-lg bg-emerald-500 px-3 py-1.5 font-bold text-slate-950 hover:bg-emerald-400"
+              className="flex items-center gap-1 rounded-lg bg-emerald-500 px-3 py-1.5 font-bold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
               Confirm & Run
@@ -363,6 +377,7 @@ export function VoiceCommandBar({
             <button
               type="button"
               data-testid={`voice-cancel-${role.toLowerCase()}`}
+              disabled={isBusy}
               onClick={() => {
                 setPreview(null);
                 inputRef.current?.focus();

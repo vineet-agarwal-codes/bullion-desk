@@ -27,4 +27,31 @@ test.describe('BullionDesk v0.2.0 AI Voice & Context Commands', () => {
     await expect(page.getByTestId('voice-result-dealer')).toContainText('CONTEXT RESOLVED');
     await expect(page.getByTestId('offset-val-silver-999-cash')).toHaveText('+500');
   });
+
+  test('Sub-dealer asks bhavv, cancels order modal cleanly, and inspects Khata + clickable Order Details', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByTestId('demo-login-mehra').click();
+
+    // 1. Khata top strip is visible
+    await expect(page.getByTestId('khata-top-panel')).toBeVisible();
+
+    // 2. Ask "bhavv kya chalra hai" -> instant AI answer without confirmation step
+    await page.getByTestId('voice-input-client').fill('bhavv kya chalra hai');
+    await expect(page.getByTestId('voice-submit-client')).toBeEnabled();
+    await page.getByTestId('voice-submit-client').click();
+    await expect(page.getByTestId('voice-result-client')).toContainText('Live Rates');
+
+    // 3. Click sample chip -> opens Order Ticket Modal -> Cancel modal -> Execute button resets cleanly
+    await page.getByText('“2 peti chandi pakki kar do”').click();
+    await expect(page.getByTestId('order-ticket-modal')).toBeVisible();
+    await page.getByTestId('order-ticket-modal').getByText('✕').click();
+    await expect(page.getByTestId('order-ticket-modal')).toHaveCount(0);
+    await expect(page.getByTestId('voice-submit-client')).toBeDisabled();
+
+    // Typing new text re-enables Execute
+    await page.getByTestId('voice-input-client').fill('bhav batao');
+    await expect(page.getByTestId('voice-submit-client')).toBeEnabled();
+  });
 });
