@@ -13,6 +13,7 @@ export const OrderTypeSchema = z.enum(['MARKET', 'LIMIT']);
 export type OrderType = z.infer<typeof OrderTypeSchema>;
 
 export const OrderStatusSchema = z.enum([
+  'PROCESSING',
   'PENDING_CONFIRM',
   'PENDING_LIMIT',
   'CONFIRMED',
@@ -111,6 +112,7 @@ export const CreateOrderInputSchema = z.object({
   orderType: OrderTypeSchema,
   qtyUnits: z.number().positive(),
   limitRate: z.number().positive().optional(),
+  expectedRate: z.number().positive().optional(),
   source: z.enum(['WEB', 'WHATSAPP', 'VOICE']).default('WEB'),
 });
 export type CreateOrderInput = z.infer<typeof CreateOrderInputSchema>;

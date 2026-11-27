@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
   AuthUser,
   ClientProfile,
@@ -9,7 +9,7 @@ import type {
   SettlementType,
 } from '@bullion-desk/shared';
 import { calculateOrderFinancials } from '@bullion-desk/shared';
-import { CheckCircle2, Clock, Coins, Pencil, ShieldAlert, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, Coins, ShieldAlert } from 'lucide-react';
 import { api } from '../api';
 import { VoiceCommandBar } from './VoiceCommandBar';
 
@@ -44,14 +44,32 @@ export function ClientBoard({
   const [qtyUnits, setQtyUnits] = useState<number>(1);
   const [limitRate, setLimitRate] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ title: string; detail: string; kind: 'INFO' | 'SUCCESS' } | null>(
+    null
+  );
   const [submitting, setSubmitting] = useState(false);
+  const prevOrderStatusesRef = useRef<Map<string, string>>(new Map());
 
   const selectedClient = clients.find((c) => c.id === selectedClientId) ?? clients[0];
   const clientOrders = orders.filter(
     (o) => o.clientId === selectedClient?.id && o.status !== 'CANCELLED'
   );
-  const pendingOrders = clientOrders.filter((o) => o.status === 'PENDING_CONFIRM');
-  const latestPendingOrder = pendingOrders[0] ?? null;
+
+  // Show in-app notification toast when an order transitions to CONFIRMED
+  useEffect(() => {
+    const prev = prevOrderStatusesRef.current;
+    for (const o of clientOrders) {
+      const oldStatus = prev.get(o.id);
+      if ((oldStatus === 'PROCESSING' || oldStatus === 'PENDING_LIMIT') && o.status === 'CONFIRMED') {
+        setToast({
+          title: `Deal #${o.dealNumber} Confirmed`,
+          detail: `${o.side} ${o.qtyUnits} × ${o.scripCode} @ ₹${o.quotedRate.toLocaleString('en-IN')} • WhatsApp notification sent`,
+          kind: 'SUCCESS',
+        });
+      }
+      prev.set(o.id, o.status);
+    }
+  }, [clientOrders]);
 
   const filteredQuotes = quotes.filter(
     (q) => q.isActive && (settlementFilter === 'ALL' || q.settlement === settlementFilter)
@@ -78,24 +96,53 @@ export function ClientBoard({
     setError(null);
   };
 
+  const openDraftTicket = (draft: {
+    scripId: string;
+    side: OrderSide;
+    orderType: OrderType;
+    qtyUnits: number;
+    limitRate?: number;
+  }) => {
+    const quote = quotes.find((q) => q.scripId === draft.scripId);
+    if (!quote || isFrozen) return;
+    setTicket({ quote, side: draft.side });
+    setOrderType(draft.orderType);
+    setQtyUnits(draft.qtyUnits);
+    setLimitRate(
+      String(draft.limitRate ?? (draft.side === 'BUY' ? quote.sellRate : quote.buyRate))
+    );
+    setError(null);
+  };
+
   const handlePlaceOrder = async () => {
     if (!ticket || !selectedClient) return;
     setSubmitting(true);
     setError(null);
+    const liveQuote = quotes.find((q) => q.scripId === ticket.quote.scripId) ?? ticket.quote;
+    const expectedRate = ticket.side === 'BUY' ? liveQuote.sellRate : liveQuote.buyRate;
     try {
       if (ticket.editingOrderId) {
         await api.cancelOrder(ticket.editingOrderId);
       }
-      await api.createOrder({
+      const created = await api.createOrder({
         clientId: selectedClient.id,
         scripId: ticket.quote.scripId,
         side: ticket.side,
         orderType,
         qtyUnits,
         limitRate: orderType === 'LIMIT' ? Number(limitRate) : undefined,
+        expectedRate: orderType === 'MARKET' ? expectedRate : undefined,
         source: 'WEB',
       });
       setTicket(null);
+      setToast({
+        title: `Order #${created.dealNumber} Placed`,
+        detail:
+          created.status === 'PROCESSING'
+            ? 'Verifying risk & hedging — you will receive app & WhatsApp confirmation shortly.'
+            : `Open Limit Order @ ₹${created.quotedRate.toLocaleString('en-IN')}`,
+        kind: 'INFO',
+      });
       onOrderChanged();
     } catch (err) {
       setError((err as Error).message);
@@ -134,6 +181,7 @@ export function ClientBoard({
           '10g gold 999 rtgs book karo',
         ]}
         onExecuted={() => onOrderChanged()}
+        onOpenOrderTicket={openDraftTicket}
       />
       {/* Client Context & Settlement Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
@@ -182,52 +230,30 @@ export function ClientBoard({
         </div>
       </div>
 
-      {/* Pending Deal Confirmation Banner */}
-      {latestPendingOrder && (
+      {/* In-App Order Processing / Confirmation Notification */}
+      {toast && (
         <div
-          data-testid="pending-confirm-banner"
-          className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-amber-500/50 bg-amber-500/10 p-4"
+          data-testid="order-status-toast"
+          className={`flex items-center justify-between gap-4 rounded-xl border p-3.5 text-xs ${
+            toast.kind === 'SUCCESS'
+              ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+              : 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+          }`}
         >
-          <div className="flex items-center gap-3">
-            <Clock className="h-6 w-6 text-amber-400 animate-pulse" />
+          <div className="flex items-center gap-2.5">
+            {toast.kind === 'SUCCESS' ? (
+              <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+            ) : (
+              <Clock className="h-5 w-5 text-amber-400 animate-spin shrink-0" />
+            )}
             <div>
-              <div className="font-semibold text-amber-200">
-                Deal #{latestPendingOrder.dealNumber} Pending Confirmation — {latestPendingOrder.side}{' '}
-                {latestPendingOrder.qtyUnits} × {latestPendingOrder.scripCode}
-              </div>
-              <div className="text-xs text-amber-300/80">
-                Locked Rate: ₹{latestPendingOrder.quotedRate.toLocaleString('en-IN')} | Total: ₹
-                {latestPendingOrder.totalInr.toLocaleString('en-IN')} (GST: ₹
-                {latestPendingOrder.gstAmount.toLocaleString('en-IN')})
-              </div>
+              <div className="font-bold">{toast.title}</div>
+              <div className="opacity-85">{toast.detail}</div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              data-testid="confirm-deal-btn"
-              onClick={() => handleConfirm(latestPendingOrder.id)}
-              className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-emerald-400"
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              Confirm Sauda
-            </button>
-            <button
-              data-testid="edit-deal-btn"
-              onClick={() => openEditTicket(latestPendingOrder)}
-              className="flex items-center gap-1.5 rounded-lg border border-amber-500/50 bg-slate-900 px-3 py-2 text-sm font-medium text-amber-300 hover:bg-slate-800"
-            >
-              <Pencil className="h-4 w-4" />
-              Edit
-            </button>
-            <button
-              data-testid="cancel-deal-btn"
-              onClick={() => handleCancel(latestPendingOrder.id)}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800"
-            >
-              <XCircle className="h-4 w-4" />
-              Cancel
-            </button>
-          </div>
+          <button onClick={() => setToast(null)} className="text-slate-400 hover:text-slate-200">
+            ✕
+          </button>
         </div>
       )}
 

@@ -29,6 +29,18 @@ export class WhatsAppAgentService {
     return this.messages.filter((m) => m.phone === phone);
   }
 
+  notifyOrderConfirmed(
+    phone: string,
+    order: { dealNumber: number; side: string; qtyUnits: number; scripCode: string; quotedRate: number; totalInr: number }
+  ) {
+    const text =
+      `✅ *Order Confirmed! Deal #${order.dealNumber}*\n` +
+      `${order.side} ${order.qtyUnits} × ${order.scripCode}\n` +
+      `Booked Rate: ₹${order.quotedRate.toLocaleString('en-IN')}\n` +
+      `Total: ₹${order.totalInr.toLocaleString('en-IN')}`;
+    this.record(phone, 'BOT', 'OUTBOUND', text);
+  }
+
   private record(
     phone: string,
     senderRole: WhatsAppMessage['senderRole'],
@@ -150,6 +162,7 @@ export class WhatsAppAgentService {
           role: 'CLIENT',
           clientId,
           autoExecute: true,
+          source: 'WHATSAPP',
         });
         if (res.order) {
           // Ensure source is tagged as WHATSAPP

@@ -91,7 +91,7 @@ describe('MarketService & API Integration', () => {
     });
     expect(createRes.statusCode).toBe(201);
     const created = createRes.json();
-    expect(created.status).toBe('PENDING_CONFIRM');
+    expect(created.status).toBe('PROCESSING');
 
     const confirmRes = await ctx.app.inject({
       method: 'POST',
@@ -149,5 +149,31 @@ describe('MarketService & API Integration', () => {
     const updated = orders.find((o: { id: string }) => o.id === order.id);
     expect(updated.status).toBe('CONFIRMED');
     expect(updated.quotedRate).toBe(138000);
+  });
+
+  it('rejects order with stale expectedRate when dealer changes price concurrently (race condition guard)', async () => {
+    // Market rate for gold-999-rtgs is ~115700. Dealer increases offset by +500
+    await ctx.app.inject({
+      method: 'PATCH',
+      url: '/api/scrips/gold-999-rtgs',
+      headers: adminHeaders,
+      payload: { manualOffset: 750 },
+    });
+
+    const staleRes = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/orders',
+      headers: adminHeaders,
+      payload: {
+        clientId: 'client-mehra',
+        scripId: 'gold-999-rtgs',
+        side: 'BUY',
+        orderType: 'MARKET',
+        qtyUnits: 1,
+        expectedRate: 115700,
+      },
+    });
+    expect(staleRes.statusCode).toBe(400);
+    expect(staleRes.json().error).toContain('Rate changed');
   });
 });

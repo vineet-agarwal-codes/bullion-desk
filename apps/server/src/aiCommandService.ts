@@ -308,7 +308,7 @@ export class AiCommandService {
   executeCommand(
     rawText: string,
     sessionId: string,
-    options: { role?: 'DEALER' | 'CLIENT'; clientId?: string; autoExecute?: boolean } = {}
+    options: { role?: 'DEALER' | 'CLIENT'; clientId?: string; autoExecute?: boolean; source?: 'WEB' | 'WHATSAPP' | 'VOICE' } = {}
   ): AiCommandResponse {
     const role = options.role ?? 'DEALER';
     const parsed = this.parseCommand(rawText, sessionId, role);
@@ -421,7 +421,7 @@ export class AiCommandService {
           orderType: parsed.limitRate ? 'LIMIT' : 'MARKET',
           qtyUnits: parsed.qtyUnits ?? 1,
           limitRate: parsed.limitRate,
-          source: 'VOICE',
+          source: options.source ?? 'VOICE',
         });
         return {
           parsed,

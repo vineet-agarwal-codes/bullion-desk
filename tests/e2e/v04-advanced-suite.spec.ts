@@ -8,10 +8,10 @@ test.describe('BullionDesk v0.4.0 Hedge, Badla MTM & RTGS Fraud Shield', () => {
     await page.getByTestId('demo-login-admin').click();
     await page.getByTestId('nav-client-board').click();
 
-    // 1. Place and confirm a 1 Peti (30kg) Silver order
+    // 1. Place a 1 Peti (30kg) Silver order (auto-confirms in ~600ms)
     await page.getByTestId('buy-btn-silver-999-peti-cash').click();
     await page.getByTestId('submit-order-btn').click();
-    await page.getByTestId('confirm-deal-btn').click();
+    await expect(page.getByTestId('order-status-toast')).toContainText('Confirmed', { timeout: 10000 });
 
     // 2. Navigate to Hedge & Risk Suite
     await page.getByTestId('nav-risk-suite').click();

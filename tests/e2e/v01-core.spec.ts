@@ -42,7 +42,7 @@ test.describe('BullionDesk v0.1.0 Core Flow', () => {
     await page.getByTestId('kill-switch-btn').click();
     await expect(page.getByTestId('market-status-badge')).toContainText('TRADING ACTIVE');
 
-    // 5. Logout and login as Sub-Dealer Mehra Sons to place & confirm Market Order
+    // 5. Sub-dealer places a Market BUY order (single-click, no second confirm box)
     await page.getByTestId('logout-btn').click();
     await page.getByTestId('demo-login-mehra').click();
 
@@ -51,11 +51,8 @@ test.describe('BullionDesk v0.1.0 Core Flow', () => {
     await page.getByTestId('order-qty-input').fill('2');
     await page.getByTestId('submit-order-btn').click();
 
-    // 6. Pending confirmation banner appears -> Confirm Sauda
-    await expect(page.getByTestId('pending-confirm-banner')).toBeVisible();
-    await page.getByTestId('confirm-deal-btn').click();
-
-    // 7. Verify Dual Ledger updated (20.00 g Gold)
-    await expect(page.getByTestId('client-gold-balance')).toContainText('20.00 g');
+    // 6. Verify Dual Ledger automatically updates (20.00 g Gold) & confirmation toast appears
+    await expect(page.getByTestId('client-gold-balance')).toContainText('20.00 g', { timeout: 10000 });
+    await expect(page.getByTestId('order-status-toast')).toContainText('Confirmed');
   });
 });

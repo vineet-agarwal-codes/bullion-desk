@@ -22,6 +22,7 @@ export interface AppOptions {
   dbPath?: string;
   enableFeedTimer?: boolean;
   enableLiveFeed?: boolean;
+  enableAutoConfirm?: boolean;
   feedIntervalMs?: number;
 }
 
@@ -99,10 +100,25 @@ export async function createApp(options: AppOptions = {}): Promise<{
     broadcastMarket();
   });
 
+  const autoConfirmEnabled = options.enableAutoConfirm ?? options.enableFeedTimer !== false;
+
   market.subscribeOrders((order) => {
+    if (order.status === 'PROCESSING' && autoConfirmEnabled) {
+      setTimeout(() => {
+        try {
+          market.confirmOrder(order.id);
+        } catch {
+          // Order may have been cancelled or expired before async confirmation
+        }
+      }, 600);
+    }
     if (order.status === 'CONFIRMED') {
       risk.recordOrderVelocity();
       hedging.onOrderConfirmed(order, feed.getTick());
+      const client = market.getClient(order.clientId);
+      if (client?.phone && order.source !== 'WHATSAPP') {
+        whatsapp.notifyOrderConfirmed(client.phone, order);
+      }
     }
     const msg: WsServerMessage = {
       type: 'ORDER_EVENT',

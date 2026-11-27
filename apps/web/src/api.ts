@@ -99,6 +99,10 @@ export const api = {
         confidence: number;
         explanation: string;
         usedContext: boolean;
+        targetScripIds?: string[];
+        side?: 'BUY' | 'SELL';
+        qtyUnits?: number;
+        limitRate?: number;
       };
       executed: boolean;
       message: string;

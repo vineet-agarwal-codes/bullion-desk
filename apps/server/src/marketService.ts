@@ -59,13 +59,16 @@ export class MarketService {
   }
 
   setFreeze(isFrozen: boolean, reason: string = ''): { isFrozen: boolean; freezeReason: string | null } {
-    this.db
-      .prepare('INSERT OR REPLACE INTO market_settings (key, value) VALUES (?, ?)')
-      .run('is_frozen', isFrozen ? '1' : '0');
-    this.db
-      .prepare('INSERT OR REPLACE INTO market_settings (key, value) VALUES (?, ?)')
-      .run('freeze_reason', reason);
-    return this.isFrozen();
+    const txn = this.db.transaction(() => {
+      this.db
+        .prepare('INSERT OR REPLACE INTO market_settings (key, value) VALUES (?, ?)')
+        .run('is_frozen', isFrozen ? '1' : '0');
+      this.db
+        .prepare('INSERT OR REPLACE INTO market_settings (key, value) VALUES (?, ?)')
+        .run('freeze_reason', reason);
+      return this.isFrozen();
+    });
+    return txn.immediate();
   }
 
   listScrips(): ScripConfig[] {
@@ -213,62 +216,77 @@ export class MarketService {
   }
 
   createOrder(input: CreateOrderInput): Order {
-    const { isFrozen } = this.isFrozen();
-    if (isFrozen) {
-      throw new Error('Market is currently frozen by dealer (Call for Rate)');
-    }
-
-    const client = this.getClient(input.clientId);
-    if (!client || !client.isActive) {
-      throw new Error('Client not found or inactive');
-    }
-
-    const scrip = this.getScrip(input.scripId);
-    if (!scrip || !scrip.isActive) {
-      throw new Error('Scrip not found or inactive');
-    }
-
-    if (input.qtyUnits < scrip.minQty || input.qtyUnits > scrip.maxQty) {
-      throw new Error(`Quantity must be between ${scrip.minQty} and ${scrip.maxQty} units`);
-    }
-
-    const totalGrams = input.qtyUnits * scrip.unitGrams;
-    if (scrip.metal === 'GOLD' && totalGrams > client.maxGoldGrams) {
-      throw new Error(`Order exceeds client max Gold limit (${client.maxGoldGrams}g)`);
-    }
-    if (scrip.metal === 'SILVER' && totalGrams / 1000 > client.maxSilverKg) {
-      throw new Error(`Order exceeds client max Silver limit (${client.maxSilverKg}kg)`);
-    }
-
-    if (input.orderType === 'LIMIT' && (!input.limitRate || input.limitRate <= 0)) {
-      throw new Error('Limit rate is required for LIMIT orders');
-    }
-
-    const tick = this.feed.getTick();
-    const quote = calculateScripQuote(tick, scrip, client.clientGroup, isFrozen);
-    const marketRate = input.side === 'BUY' ? quote.sellRate : quote.buyRate;
-    const effectiveRate = input.orderType === 'LIMIT' ? input.limitRate! : marketRate;
-
-    const { gstAmount, totalInr } = calculateOrderFinancials(
-      input.qtyUnits,
-      effectiveRate,
-      scrip.gstPercent
-    );
-
     const now = Date.now();
     const id = randomUUID();
 
-    // Check if LIMIT order is immediately marketable
-    const isLimitMarketable =
-      input.orderType === 'LIMIT' &&
-      ((input.side === 'BUY' && quote.sellRate <= input.limitRate!) ||
-        (input.side === 'SELL' && quote.buyRate >= input.limitRate!));
-
-    const status: Order['status'] =
-      input.orderType === 'MARKET' || isLimitMarketable ? 'PENDING_CONFIRM' : 'PENDING_LIMIT';
-    const expiresAt = status === 'PENDING_CONFIRM' ? now + 60_000 : null;
-
+    // Atomic SQLite IMMEDIATE transaction serializes order placement against concurrent Kill Switch or price changes
     const txn = this.db.transaction(() => {
+      const { isFrozen } = this.isFrozen();
+      if (isFrozen) {
+        throw new Error('Market is currently frozen by dealer (Call for Rate)');
+      }
+
+      const client = this.getClient(input.clientId);
+      if (!client || !client.isActive) {
+        throw new Error('Client not found or inactive');
+      }
+
+      const scrip = this.getScrip(input.scripId);
+      if (!scrip || !scrip.isActive) {
+        throw new Error('Scrip not found or inactive');
+      }
+
+      if (input.qtyUnits < scrip.minQty || input.qtyUnits > scrip.maxQty) {
+        throw new Error(`Quantity must be between ${scrip.minQty} and ${scrip.maxQty} units`);
+      }
+
+      const totalGrams = input.qtyUnits * scrip.unitGrams;
+      if (scrip.metal === 'GOLD' && totalGrams > client.maxGoldGrams) {
+        throw new Error(`Order exceeds client max Gold limit (${client.maxGoldGrams}g)`);
+      }
+      if (scrip.metal === 'SILVER' && totalGrams / 1000 > client.maxSilverKg) {
+        throw new Error(`Order exceeds client max Silver limit (${client.maxSilverKg}kg)`);
+      }
+
+      if (input.orderType === 'LIMIT' && (!input.limitRate || input.limitRate <= 0)) {
+        throw new Error('Limit rate is required for LIMIT orders');
+      }
+
+      const tick = this.feed.getTick();
+      const quote = calculateScripQuote(tick, scrip, client.clientGroup, isFrozen);
+      const marketRate = input.side === 'BUY' ? quote.sellRate : quote.buyRate;
+
+      // Race-condition slippage guard: if dealer changed price or market jumped > ₹150/unit while user clicked
+      if (input.orderType === 'MARKET' && input.expectedRate !== undefined) {
+        const slippage = Math.abs(marketRate - input.expectedRate);
+        const maxSlippage = Math.max(150, Math.round(input.expectedRate * 0.002));
+        if (slippage > maxSlippage) {
+          throw new Error(
+            `Rate changed from ₹${input.expectedRate.toLocaleString('en-IN')} to ₹${marketRate.toLocaleString('en-IN')}. Please review the updated quote.`
+          );
+        }
+      }
+
+      const effectiveRate = input.orderType === 'LIMIT' ? input.limitRate! : marketRate;
+      const { gstAmount, totalInr } = calculateOrderFinancials(
+        input.qtyUnits,
+        effectiveRate,
+        scrip.gstPercent
+      );
+
+      const isLimitMarketable =
+        input.orderType === 'LIMIT' &&
+        ((input.side === 'BUY' && quote.sellRate <= input.limitRate!) ||
+          (input.side === 'SELL' && quote.buyRate >= input.limitRate!));
+
+      const status: Order['status'] =
+        input.orderType === 'MARKET' || isLimitMarketable
+          ? input.source === 'WHATSAPP'
+            ? 'PENDING_CONFIRM'
+            : 'PROCESSING'
+          : 'PENDING_LIMIT';
+      const expiresAt = status === 'PENDING_CONFIRM' ? now + 60_000 : null;
+
       const dealRow = this.db
         .prepare('SELECT value FROM market_settings WHERE key = ?')
         .get('next_deal_number') as { value: string };
@@ -310,7 +328,7 @@ export class MarketService {
           now
         );
     });
-    txn();
+    txn.immediate();
 
     const order = this.getOrder(id)!;
     this.emitOrder(order);
@@ -323,7 +341,7 @@ export class MarketService {
       const order = this.getOrder(orderId);
       if (!order) throw new Error('Order not found');
       if (order.status === 'CONFIRMED') return order;
-      if (order.status !== 'PENDING_CONFIRM') {
+      if (order.status !== 'PENDING_CONFIRM' && order.status !== 'PROCESSING') {
         throw new Error(`Cannot confirm order in status ${order.status}`);
       }
       if (order.expiresAt && now > order.expiresAt) {
@@ -357,7 +375,7 @@ export class MarketService {
       return this.getOrder(orderId)!;
     });
 
-    const confirmed = txn();
+    const confirmed = txn.immediate();
     this.emitOrder(confirmed);
     return confirmed;
   }

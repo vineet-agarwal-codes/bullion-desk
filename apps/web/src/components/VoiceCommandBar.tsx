@@ -9,9 +9,23 @@ interface Props {
   clientId?: string;
   samples: string[];
   onExecuted: (orderCreated?: boolean) => void;
+  onOpenOrderTicket?: (draft: {
+    scripId: string;
+    side: 'BUY' | 'SELL';
+    orderType: 'MARKET' | 'LIMIT';
+    qtyUnits: number;
+    limitRate?: number;
+  }) => void;
 }
 
-export function VoiceCommandBar({ role, sessionId, clientId, samples, onExecuted }: Props) {
+export function VoiceCommandBar({
+  role,
+  sessionId,
+  clientId,
+  samples,
+  onExecuted,
+  onOpenOrderTicket,
+}: Props) {
   const [text, setText] = useState('');
   const [listening, setListening] = useState(false);
   const [preview, setPreview] = useState<{
@@ -42,6 +56,26 @@ export function VoiceCommandBar({ role, sessionId, clientId, samples, onExecuted
         clientId,
         autoExecute: false,
       });
+
+      // For sub-dealer order commands, open the Order Ticket Modal pre-filled so they only confirm once!
+      if (
+        role === 'CLIENT' &&
+        res.parsed.intent === 'PLACE_ORDER' &&
+        res.parsed.targetScripIds?.[0] &&
+        onOpenOrderTicket
+      ) {
+        onOpenOrderTicket({
+          scripId: res.parsed.targetScripIds[0],
+          side: res.parsed.side ?? 'BUY',
+          orderType: res.parsed.limitRate ? 'LIMIT' : 'MARKET',
+          qtyUnits: res.parsed.qtyUnits ?? 1,
+          limitRate: res.parsed.limitRate,
+        });
+        setPreview(null);
+        setText('');
+        return;
+      }
+
       setPreview({
         originalText: trimmed,
         intent: res.parsed.intent,
