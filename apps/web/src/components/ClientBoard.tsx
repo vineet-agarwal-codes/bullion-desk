@@ -262,7 +262,7 @@ export function ClientBoard({
               data-testid="logged-in-firm"
               className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-sm font-semibold text-emerald-300"
             >
-              {selectedClient?.firmName ?? user.displayName} ({selectedClient?.clientGroup ?? user.clientGroup})
+              {user.displayName}
             </span>
           )}
         </div>

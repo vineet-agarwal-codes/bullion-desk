@@ -570,7 +570,7 @@ export class AiCommandService {
           return {
             parsed,
             executed: true,
-            message: `Dual Ledger (${c.firmName}): Cash ₹${c.cashBalanceInr.toLocaleString('en-IN')} | Gold ${c.metalBalanceGoldGrams.toFixed(2)}g | Silver ${(c.metalBalanceSilverGrams / 1000).toFixed(3)}kg`,
+            message: `Dual Ledger: Cash ₹${c.cashBalanceInr.toLocaleString('en-IN')} | Gold ${c.metalBalanceGoldGrams.toFixed(2)}g | Silver ${(c.metalBalanceSilverGrams / 1000).toFixed(3)}kg`,
             context: nextCtx,
           };
         }

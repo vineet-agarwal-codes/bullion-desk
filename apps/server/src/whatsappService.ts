@@ -196,7 +196,7 @@ export class WhatsAppAgentService {
 
     if (/\b(hisab|balance|ledger|khata)\b/i.test(lower)) {
       return (
-        `📒 *Dual Ledger — ${client.firmName}*\n` +
+        `📒 *Your Khata / Dual Ledger*\n` +
         `• Cash Balance: ₹${client.cashBalanceInr.toLocaleString('en-IN')}\n` +
         `• Fine Gold (999): ${client.metalBalanceGoldGrams.toFixed(2)} g\n` +
         `• Fine Silver (999): ${(client.metalBalanceSilverGrams / 1000).toFixed(3)} kg`
@@ -279,7 +279,7 @@ export class WhatsAppAgentService {
     // 2. Ledger / Balance check
     if (/\b(hisab|balance|ledger|khata)\b/i.test(lower)) {
       return (
-        `📒 *Dual Ledger — ${client.firmName}*\n` +
+        `📒 *Your Khata / Dual Ledger*\n` +
         `• Cash Balance: ₹${client.cashBalanceInr.toLocaleString('en-IN')}\n` +
         `• Fine Gold (999): ${client.metalBalanceGoldGrams.toFixed(2)} g\n` +
         `• Fine Silver (999): ${(client.metalBalanceSilverGrams / 1000).toFixed(3)} kg`
@@ -352,7 +352,7 @@ export class WhatsAppAgentService {
     if (settlement) quotes = quotes.filter((q) => q.settlement === settlement);
 
     return formatBullionRatesMessage(quotes, {
-      header: `📈 *Live BullionDesk Rates (${group})*`,
+      header: `📈 *Live BullionDesk Rates*`,
       tick: state.tick,
       metal,
       settlement,

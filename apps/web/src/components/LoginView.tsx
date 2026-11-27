@@ -9,9 +9,9 @@ interface Props {
 
 const DEMO_ACCOUNTS = [
   { label: 'Dealer Admin (Owner)', user: 'admin', pass: 'admin123', role: 'ADMIN' },
-  { label: 'Mehra Sons (GROUP_A)', user: 'mehra', pass: 'mehra123', role: 'SUB_DEALER' },
-  { label: 'Agarwal Payal (GROUP_A)', user: 'agarwal', pass: 'agarwal123', role: 'SUB_DEALER' },
-  { label: 'Sharma Chains (GROUP_B)', user: 'sharma', pass: 'sharma123', role: 'SUB_DEALER' },
+  { label: 'Mehra Sons Bullion', user: 'mehra', pass: 'mehra123', role: 'SUB_DEALER' },
+  { label: 'Agarwal Payal & Co', user: 'agarwal', pass: 'agarwal123', role: 'SUB_DEALER' },
+  { label: 'Sharma Chains', user: 'sharma', pass: 'sharma123', role: 'SUB_DEALER' },
 ];
 
 export function LoginView({ onLogin }: Props) {
