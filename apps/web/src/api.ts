@@ -7,8 +7,10 @@ import type {
   ScripConfig,
 } from '@bullion-desk/shared';
 
-export const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
-export const WS_BASE = API_BASE.replace(/^http/, 'ws');
+export const API_BASE = import.meta.env.VITE_API_URL ?? '';
+export const WS_BASE = API_BASE
+  ? API_BASE.replace(/^http/, 'ws')
+  : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
