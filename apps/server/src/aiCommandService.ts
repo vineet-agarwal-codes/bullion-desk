@@ -130,8 +130,13 @@ export class AiCommandService {
 
     const isPeti = /\bpeti\b/.test(text);
 
-    // 4. Rate Query
-    if (/\b(rate|bhaav|price|kya hai|batao|quote)\b/.test(text) && !/\b(badha|kam|ghata|plus|minus|set|kar do|book|buy|sell|karo)\b/.test(text)) {
+    // 4. Rate Query (supports rate, bhaav, bhav, bhau, kya chal raha/chalra, batao, etc.)
+    const hasRateWord = /\b(rate|rates|bhaav|bhav|bhau|price|prices|quote|quotes|market)\b/.test(text);
+    const hasRateQuestion = /\b(kya hai|kya chal|chalra|chal raha|batao|dikhao|kitna)\b/.test(text);
+    const isAdjustOrOrderVerb = /\b(badha|kam|ghata|plus|minus|set|book|pakki|buy|khareed|khareedo|sell|bech|becho|laga|order)\b/.test(
+      text
+    );
+    if ((hasRateWord || hasRateQuestion) && !isAdjustOrOrderVerb) {
       if (!metal && ctx.lastMetal) {
         metal = ctx.lastMetal;
         usedContext = true;
@@ -149,10 +154,12 @@ export class AiCommandService {
       };
     }
 
-    // 5. Order Placement (Client or Voice Deal)
-    const isOrderVerb = /\b(book|pakki|buy|khareed|sell|bech|laga|order|karo)\b/.test(text);
+    // 5. Order Placement (MUST have explicit order verb or unit+qty — never blindly place an order!)
+    const isOrderVerb = /\b(book|pakki|buy|khareed|khareedo|sell|bech|becho|laga|order|le lo|de do)\b/.test(
+      text
+    );
     const hasOrderUnit = /\b(peti|chorsa|kg|kilo|g|gm|gram|tola|tora)\b/.test(text);
-    if (role === 'CLIENT' || (isOrderVerb && hasOrderUnit)) {
+    if (isOrderVerb || (role === 'CLIENT' && hasOrderUnit && /\d/.test(text))) {
       const side: 'BUY' | 'SELL' = /\b(sell|bech)\b/.test(text) ? 'SELL' : 'BUY';
       if (!metal && ctx.lastMetal) {
         metal = ctx.lastMetal;

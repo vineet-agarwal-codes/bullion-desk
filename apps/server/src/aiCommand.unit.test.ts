@@ -74,4 +74,12 @@ describe('AiCommandService Unit Tests (Hinglish & Context)', () => {
     expect(r2.qtyUnits).toBe(10);
     expect(r2.targetScripIds[0]).toBe('silver-999-peti-cash');
   });
+
+  it('recognizes Hinglish rate queries like "bhau kya chalra. hai bhaiya" and never places accidental orders on unknown text', () => {
+    const rateQ = ai.parseCommand('bhau kya chalra. hai bhaiya', 'sess-q', 'CLIENT');
+    expect(rateQ.intent).toBe('QUERY_RATE');
+
+    const unknown = ai.parseCommand('hello bhaiya kaise ho', 'sess-u', 'CLIENT');
+    expect(unknown.intent).toBe('UNKNOWN');
+  });
 });
