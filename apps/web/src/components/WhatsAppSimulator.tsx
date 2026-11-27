@@ -14,7 +14,8 @@ export function WhatsAppSimulator({ user, clients, onOrderOrRateChanged }: Props
     user.role === 'SUB_DEALER' && user.phone ? user.phone : '+919811001122';
   const [selectedPhone, setSelectedPhone] = useState<string>(defaultPhone);
   const [text, setText] = useState('');
-  const [sending, setSending] = useState(false);
+  const [sendingPhone, setSendingPhone] = useState<string | null>(null);
+  const isSendingCurrent = sendingPhone === selectedPhone;
   const [messages, setMessages] = useState<
     Array<{
       id: string;
@@ -37,18 +38,19 @@ export function WhatsAppSimulator({ user, clients, onOrderOrRateChanged }: Props
 
   const sendMsg = async (msgText: string) => {
     const trimmed = msgText.trim();
-    if (!trimmed || sending) return;
+    const targetPhone = selectedPhone;
+    if (!trimmed || sendingPhone === targetPhone) return;
 
     // Optimistically show sent message immediately and clear input
     const optimisticId = `opt-${Date.now()}`;
     setText('');
-    setSending(true);
+    setSendingPhone(targetPhone);
     setMessages((prev) => [
       ...prev,
       {
         id: optimisticId,
-        phone: selectedPhone,
-        senderRole: selectedPhone === '+919999999999' ? 'OWNER' : 'SUB_DEALER',
+        phone: targetPhone,
+        senderRole: targetPhone === '+919999999999' ? 'OWNER' : 'SUB_DEALER',
         direction: 'INBOUND',
         text: trimmed,
         timestamp: Date.now(),
@@ -56,11 +58,13 @@ export function WhatsAppSimulator({ user, clients, onOrderOrRateChanged }: Props
     ]);
 
     try {
-      await api.simulateWhatsApp(selectedPhone, trimmed);
-      await loadMessages();
+      await api.simulateWhatsApp(targetPhone, trimmed);
+      if (selectedPhone === targetPhone) {
+        await loadMessages();
+      }
       onOrderOrRateChanged();
     } finally {
-      setSending(false);
+      setSendingPhone((curr) => (curr === targetPhone ? null : curr));
     }
   };
 
@@ -145,9 +149,9 @@ export function WhatsAppSimulator({ user, clients, onOrderOrRateChanged }: Props
           data-testid="wa-chat-history"
           className="flex-1 overflow-y-auto p-4 space-y-3 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 to-slate-950"
         >
-          {messages.length === 0 && (
+          {messages.length === 0 && !isSendingCurrent && (
             <div className="text-center text-xs text-slate-500 py-12">
-              Send a Hinglish WhatsApp message below to interact with the BullionDesk agent.
+              Send a Hinglish WhatsApp message below to interact with the Shubh Jewellers agent.
             </div>
           )}
           {messages.map((m) => (
@@ -166,7 +170,7 @@ export function WhatsAppSimulator({ user, clients, onOrderOrRateChanged }: Props
               </div>
             </div>
           ))}
-          {sending && (
+          {isSendingCurrent && (
             <div className="flex justify-start" data-testid="wa-typing-indicator">
               <div className="rounded-xl rounded-bl-none border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs text-slate-400 animate-pulse">
                 Shubh Jewellers Bot is typing...
@@ -181,7 +185,7 @@ export function WhatsAppSimulator({ user, clients, onOrderOrRateChanged }: Props
               <button
                 key={chip}
                 type="button"
-                disabled={sending}
+                disabled={isSendingCurrent}
                 onClick={() => sendMsg(chip)}
                 className="rounded-full border border-slate-700 bg-slate-950 px-2.5 py-1 text-[11px] text-slate-300 hover:border-emerald-500 hover:text-emerald-300 disabled:opacity-40"
               >
@@ -207,11 +211,11 @@ export function WhatsAppSimulator({ user, clients, onOrderOrRateChanged }: Props
             <button
               data-testid="wa-send-btn"
               type="submit"
-              disabled={sending || !text.trim()}
+              disabled={isSendingCurrent || !text.trim()}
               className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
             >
               <Send className="h-3.5 w-3.5" />
-              {sending ? 'Sending...' : 'Send'}
+              {isSendingCurrent ? 'Sending...' : 'Send'}
             </button>
           </form>
         </div>
