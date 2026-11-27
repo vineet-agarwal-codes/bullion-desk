@@ -8,7 +8,9 @@ interface Props {
 }
 
 export function TickerStrip({ tick, isFrozen, freezeReason }: Props) {
+  const isLiveMcx = tick?.source === 'LIVE_MCX';
   const isLiveParity = tick?.source === 'LIVE_PARITY';
+  const isLive = isLiveMcx || isLiveParity;
 
   return (
     <div className="border-b border-slate-800 bg-slate-900/90 px-4 py-2">
@@ -19,17 +21,19 @@ export function TickerStrip({ tick, isFrozen, freezeReason }: Props) {
             <span>MCX INDIA</span>
             <span
               className={`ml-1 rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                isLiveParity
+                isLive
                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                   : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
               }`}
               title={
-                isLiveParity
-                  ? 'Live international spot + Indian 6% import duty parity'
-                  : 'Simulated local MCX tick feed'
+                isLiveMcx
+                  ? 'Live MCX India Commodity Feed (Groww)'
+                  : isLiveParity
+                    ? 'Live international spot + Indian 6% import duty parity'
+                    : 'Simulated local MCX tick feed'
               }
             >
-              {isLiveParity ? 'LIVE PARITY' : 'SIMULATED'}
+              {isLiveMcx ? 'LIVE MCX' : isLiveParity ? 'LIVE PARITY' : 'SIMULATED'}
             </span>
           </div>
           <div>

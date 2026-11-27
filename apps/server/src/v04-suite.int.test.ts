@@ -58,7 +58,7 @@ describe('v0.4.0 Auto-Hedging, Badla MTM Risk & RTGS Fraud Shield Integration', 
         clientId: 'client-sharma',
         metal: 'SILVER',
         grams: 50000, // 50 kg
-        entryRatePerUnit: 138200,
+        entryRatePerUnit: 153953,
         marginDepositedInr: 200000, // ₹2L margin
       },
     });
@@ -69,7 +69,7 @@ describe('v0.4.0 Auto-Hedging, Badla MTM Risk & RTGS Fraud Shield Integration', 
       method: 'POST',
       url: '/api/market/tick',
       headers: adminHeaders,
-      payload: { silverMcx: 142000 },
+      payload: { silverMcx: 157753 },
     });
 
     const listRes = await ctx.app.inject({

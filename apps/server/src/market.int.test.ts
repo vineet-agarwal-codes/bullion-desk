@@ -117,7 +117,7 @@ describe('MarketService & API Integration', () => {
   });
 
   it('auto-fills PENDING_LIMIT orders when MCX tick reaches target price', async () => {
-    // Current silver MCX is 138200, silver-999-cash offset is +450 -> sellRate 138650 (GROUP_B)
+    // Current silver MCX is 153953, silver-999-cash offset is +450 -> sellRate 154403 (GROUP_B)
     const createRes = await ctx.app.inject({
       method: 'POST',
       url: '/api/orders',
@@ -128,19 +128,19 @@ describe('MarketService & API Integration', () => {
         side: 'BUY',
         orderType: 'LIMIT',
         qtyUnits: 5,
-        limitRate: 138000,
+        limitRate: 153000,
       },
     });
     expect(createRes.statusCode).toBe(201);
     const order = createRes.json();
     expect(order.status).toBe('PENDING_LIMIT');
 
-    // Drop MCX silver to 137500 -> sellRate becomes 137950 <= 138000
+    // Drop MCX silver to 152500 -> sellRate becomes 152950 <= 153000
     await ctx.app.inject({
       method: 'POST',
       url: '/api/market/tick',
       headers: adminHeaders,
-      payload: { silverMcx: 137500 },
+      payload: { silverMcx: 152500 },
     });
 
     const orders = (
@@ -148,7 +148,7 @@ describe('MarketService & API Integration', () => {
     ).json();
     const updated = orders.find((o: { id: string }) => o.id === order.id);
     expect(updated.status).toBe('CONFIRMED');
-    expect(updated.quotedRate).toBe(138000);
+    expect(updated.quotedRate).toBe(153000);
   });
 
   it('rejects order with stale expectedRate when dealer changes price concurrently (race condition guard)', async () => {

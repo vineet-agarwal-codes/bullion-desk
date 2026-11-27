@@ -46,7 +46,7 @@ export const McxTickSchema = z.object({
   goldComex: z.number().positive(),     // USD per oz
   silverComex: z.number().positive(),   // USD per oz
   usdInr: z.number().positive(),        // INR per USD
-  source: z.enum(['LIVE_PARITY', 'SIMULATED']).default('SIMULATED'),
+  source: z.enum(['LIVE_MCX', 'LIVE_PARITY', 'SIMULATED']).default('SIMULATED'),
   timestamp: z.number().int().positive(),
 });
 export type McxTick = z.infer<typeof McxTickSchema>;
