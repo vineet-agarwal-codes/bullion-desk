@@ -9,7 +9,16 @@ import type {
   SettlementType,
 } from '@bullion-desk/shared';
 import { calculateOrderFinancials } from '@bullion-desk/shared';
-import { CheckCircle2, ChevronRight, Clock, Coins, ShieldAlert, Wallet } from 'lucide-react';
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Clock,
+  Coins,
+  ShieldAlert,
+  Wallet,
+} from 'lucide-react';
 import { api } from '../api';
 import { VoiceCommandBar } from './VoiceCommandBar';
 
@@ -44,6 +53,7 @@ export function ClientBoard({
   const [qtyUnits, setQtyUnits] = useState<number>(1);
   const [limitRate, setLimitRate] = useState<string>('');
   const [selectedOrderDetail, setSelectedOrderDetail] = useState<Order | null>(null);
+  const [pastOrdersExpanded, setPastOrdersExpanded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ title: string; detail: string; kind: 'INFO' | 'SUCCESS' } | null>(
     null
@@ -191,48 +201,48 @@ export function ClientBoard({
       {selectedClient && (
         <div
           data-testid="khata-top-panel"
-          className="grid grid-cols-3 gap-2 sm:gap-3 rounded-xl border border-amber-500/25 bg-slate-900/80 p-2.5 sm:p-4"
+          className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 rounded-xl border border-amber-500/25 bg-slate-900/80 p-2.5 sm:p-4"
         >
-          <div className="flex items-center gap-2 sm:gap-3 rounded-lg bg-slate-950/80 px-2.5 py-2 sm:px-4 sm:py-3 border border-slate-800 min-w-0">
-            <Wallet className="hidden sm:block h-5 w-5 text-emerald-400 shrink-0" />
-            <div className="min-w-0">
-              <div className="text-[9px] sm:text-[11px] uppercase tracking-wider text-slate-400 truncate">
+          <div className="col-span-2 sm:col-span-1 flex items-center justify-between sm:justify-start gap-2 sm:gap-3 rounded-lg bg-slate-950/80 px-3 py-2.5 sm:px-4 sm:py-3 border border-slate-800">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400 shrink-0" />
+              <div className="text-[11px] uppercase tracking-wider text-slate-400">
                 Khata Cash
               </div>
-              <div
-                className="font-mono text-xs sm:text-base font-bold text-slate-100 truncate"
-                data-testid="client-cash-balance"
-              >
-                ₹{selectedClient.cashBalanceInr.toLocaleString('en-IN')}
-              </div>
+            </div>
+            <div
+              className="font-mono text-sm sm:text-base font-bold text-slate-100 whitespace-nowrap"
+              data-testid="client-cash-balance"
+            >
+              ₹{selectedClient.cashBalanceInr.toLocaleString('en-IN')}
             </div>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3 rounded-lg bg-slate-950/80 px-2.5 py-2 sm:px-4 sm:py-3 border border-slate-800 min-w-0">
-            <Coins className="hidden sm:block h-5 w-5 text-amber-400 shrink-0" />
-            <div className="min-w-0">
-              <div className="text-[9px] sm:text-[11px] uppercase tracking-wider text-slate-400 truncate">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 rounded-lg bg-slate-950/80 px-3 py-2.5 sm:px-4 sm:py-3 border border-slate-800">
+            <div className="flex items-center gap-1.5">
+              <Coins className="h-3.5 w-3.5 sm:h-5 sm:w-5 text-amber-400 shrink-0" />
+              <div className="text-[10px] sm:text-[11px] uppercase tracking-wider text-slate-400">
                 Fine Gold
               </div>
-              <div
-                className="font-mono text-xs sm:text-base font-bold text-amber-400 truncate"
-                data-testid="client-gold-balance"
-              >
-                {selectedClient.metalBalanceGoldGrams.toFixed(2)} g
-              </div>
+            </div>
+            <div
+              className="font-mono text-sm sm:text-base font-bold text-amber-400 whitespace-nowrap"
+              data-testid="client-gold-balance"
+            >
+              {selectedClient.metalBalanceGoldGrams.toFixed(2)} g
             </div>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3 rounded-lg bg-slate-950/80 px-2.5 py-2 sm:px-4 sm:py-3 border border-slate-800 min-w-0">
-            <Coins className="hidden sm:block h-5 w-5 text-slate-300 shrink-0" />
-            <div className="min-w-0">
-              <div className="text-[9px] sm:text-[11px] uppercase tracking-wider text-slate-400 truncate">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 rounded-lg bg-slate-950/80 px-3 py-2.5 sm:px-4 sm:py-3 border border-slate-800">
+            <div className="flex items-center gap-1.5">
+              <Coins className="h-3.5 w-3.5 sm:h-5 sm:w-5 text-slate-300 shrink-0" />
+              <div className="text-[10px] sm:text-[11px] uppercase tracking-wider text-slate-400">
                 Fine Silver
               </div>
-              <div
-                className="font-mono text-xs sm:text-base font-bold text-slate-200 truncate"
-                data-testid="client-silver-balance"
-              >
-                {(selectedClient.metalBalanceSilverGrams / 1000).toFixed(3)} kg
-              </div>
+            </div>
+            <div
+              className="font-mono text-sm sm:text-base font-bold text-slate-200 whitespace-nowrap"
+              data-testid="client-silver-balance"
+            >
+              {(selectedClient.metalBalanceSilverGrams / 1000).toFixed(3)} kg
             </div>
           </div>
         </div>
@@ -670,20 +680,35 @@ export function ClientBoard({
         </div>
       )}
 
-      {/* Zerodha / Groww Style Orders Book */}
+      {/* Zerodha / Groww Style Orders Book (Collapsed by default) */}
       {selectedClient && (
         <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
-          <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+          <button
+            type="button"
+            data-testid="toggle-past-orders"
+            onClick={() => setPastOrdersExpanded((v) => !v)}
+            className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-800/40 transition"
+          >
             <div className="text-xs font-bold uppercase tracking-wider text-slate-300">
-              Order Book & Recent Saudas ({clientOrders.length})
+              Order Book & Past Saudas ({clientOrders.length})
             </div>
-            <div className="text-[11px] text-slate-500">Click any order for full breakdown</div>
-          </div>
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+              <span>{pastOrdersExpanded ? 'Hide' : 'Show'}</span>
+              {pastOrdersExpanded ? (
+                <ChevronUp className="h-4 w-4 text-slate-400" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-slate-400" />
+              )}
+            </div>
+          </button>
 
-          {clientOrders.length === 0 ? (
-            <div className="text-slate-500 py-8 text-center text-xs">No orders placed yet.</div>
-          ) : (
-            <div className="divide-y divide-slate-800/70">
+          {pastOrdersExpanded &&
+            (clientOrders.length === 0 ? (
+              <div className="border-t border-slate-800 text-slate-500 py-8 text-center text-xs">
+                No orders placed yet.
+              </div>
+            ) : (
+              <div className="border-t border-slate-800 divide-y divide-slate-800/70">
               {clientOrders.map((o) => {
                 const timeStr = new Date(o.createdAt).toLocaleString('en-IN', {
                   day: '2-digit',
@@ -768,8 +793,8 @@ export function ClientBoard({
                   </div>
                 );
               })}
-            </div>
-          )}
+              </div>
+            ))}
         </div>
       )}
 
