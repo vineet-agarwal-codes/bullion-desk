@@ -17,6 +17,8 @@ import { WhatsAppAgentService } from './whatsappService.js';
 import { HedgingService } from './hedgingService.js';
 import { RiskAndComplianceService } from './riskService.js';
 import { AuthService } from './authService.js';
+import { executeMcpTool, MCP_TOOLS } from './mcpTools.js';
+import { transcribeAudioWithAgy } from './llmRouter.js';
 
 export interface AppOptions {
   dbPath?: string;
@@ -33,7 +35,7 @@ export async function createApp(options: AppOptions = {}): Promise<{
   market: MarketService;
   auth: AuthService;
 }> {
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, bodyLimit: 10 * 1024 * 1024 });
   await app.register(cors, { origin: true });
   await app.register(websocket);
 
@@ -377,7 +379,7 @@ export async function createApp(options: AppOptions = {}): Promise<{
     const effectiveClientId = user.role === 'ADMIN' ? parsed.data.clientId : (user.clientId ?? undefined);
 
     try {
-      const result = aiCommand.executeCommand(parsed.data.text, parsed.data.sessionId, {
+      const result = await aiCommand.executeCommandAsync(parsed.data.text, parsed.data.sessionId, {
         role: effectiveRole,
         clientId: effectiveClientId,
         autoExecute: parsed.data.autoExecute,
@@ -388,6 +390,54 @@ export async function createApp(options: AppOptions = {}): Promise<{
       return result;
     } catch (err) {
       return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
+
+  // Server-side Audio Transcription (Hinglish via Headless Agy Multimodal)
+  app.post('/api/ai/transcribe', async (req, reply) => {
+    const user = await requireAuth(req, reply);
+    if (!user) return;
+    const schema = z.object({
+      audioBase64: z.string().min(10),
+      mimeType: z.string().default('audio/webm'),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid audio payload' });
+    }
+    try {
+      return await transcribeAudioWithAgy(parsed.data.audioBase64, parsed.data.mimeType);
+    } catch (err) {
+      return reply.status(500).send({ error: (err as Error).message });
+    }
+  });
+
+  // MCP Tool Registry & Execution Endpoints
+  app.get('/api/mcp/tools', async (req, reply) => {
+    const user = await requireAuth(req, reply);
+    if (!user) return;
+    return MCP_TOOLS.filter((t) => t.allowedRoles.includes(user.role));
+  });
+
+  app.post('/api/mcp/call', async (req, reply) => {
+    const user = await requireAuth(req, reply);
+    if (!user) return;
+    const schema = z.object({
+      name: z.string().min(1),
+      arguments: z.record(z.unknown()).default({}),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.flatten() });
+    }
+    try {
+      const res = executeMcpTool(market, parsed.data.name, parsed.data.arguments, user, 'WEB');
+      broadcastMarket();
+      return res;
+    } catch (err) {
+      const msg = (err as Error).message;
+      const code = msg.startsWith('Forbidden') ? 403 : 400;
+      return reply.status(code).send({ error: msg });
     }
   });
 
@@ -433,7 +483,7 @@ export async function createApp(options: AppOptions = {}): Promise<{
           const phone = msg.from.startsWith('+') ? msg.from : `+${msg.from}`;
           const text = msg.text?.body ?? '';
           if (text) {
-            const res = whatsapp.handleIncoming(phone, text);
+            const res = await whatsapp.handleIncomingAsync(phone, text);
             replies.push({ to: phone, ...res });
           }
         }
@@ -455,7 +505,7 @@ export async function createApp(options: AppOptions = {}): Promise<{
     if (user.role === 'SUB_DEALER' && body.phone !== user.phone) {
       return reply.status(403).send({ error: 'Forbidden: Can only simulate your own WhatsApp number' });
     }
-    const res = whatsapp.handleIncoming(body.phone, body.text);
+    const res = await whatsapp.handleIncomingAsync(body.phone, body.text);
     broadcastMarket();
     return res;
   });

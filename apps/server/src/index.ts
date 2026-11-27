@@ -3,6 +3,9 @@ import { createApp } from './app.js';
 const port = Number(process.env.PORT ?? 3001);
 const dbPath = process.env.DB_PATH ?? './bullion-desk.db';
 const enableLiveFeed = process.env.ENABLE_LIVE_FEED !== 'false';
+if (process.env.ENABLE_AGY_LLM === undefined) {
+  process.env.ENABLE_AGY_LLM = 'true';
+}
 
 const { app } = await createApp({ dbPath, enableFeedTimer: true, enableLiveFeed });
 

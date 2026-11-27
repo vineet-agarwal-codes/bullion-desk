@@ -87,6 +87,61 @@ export class WhatsAppAgentService {
     return { reply, role };
   }
 
+  async handleIncomingAsync(
+    phone: string,
+    rawText: string
+  ): Promise<{ reply: string; role: 'OWNER' | 'SUB_DEALER' | 'PUBLIC' }> {
+    const text = rawText.trim();
+    const isOwner = phone === this.ownerPhone;
+    const client = isOwner ? null : this.market.getClient(phone);
+    const role: 'OWNER' | 'SUB_DEALER' | 'PUBLIC' = isOwner
+      ? 'OWNER'
+      : client
+        ? 'SUB_DEALER'
+        : 'PUBLIC';
+
+    this.record(phone, role, 'INBOUND', text);
+
+    let reply = '';
+    if (role === 'OWNER') {
+      const res = await this.ai.executeCommandAsync(text, `wa-owner-${phone}`, {
+        role: 'DEALER',
+        autoExecute: true,
+      });
+      reply = this.formatOwnerReply(res);
+    } else if (role === 'SUB_DEALER' && client) {
+      reply = await this.handleSubDealerMessageAsync(phone, client.id, text);
+    } else {
+      reply = this.handlePublicMessage(text);
+    }
+
+    this.record(phone, 'BOT', 'OUTBOUND', reply);
+    return { reply, role };
+  }
+
+  private formatOwnerReply(res: Awaited<ReturnType<AiCommandService['executeCommandAsync']>>): string {
+    if (res.parsed.intent === 'QUERY_POSITION') {
+      const positions = this.market.getPositionSummary();
+      if (positions.length === 0) {
+        return '📊 *Net Exposure:* No confirmed saudas today.';
+      }
+      const lines = positions.map(
+        (p) =>
+          `• *${p.metal} (${p.settlement})*: Net ${p.netGrams}g | Turnover ₹${p.totalTurnoverInr.toLocaleString('en-IN')}`
+      );
+      return `📊 *Shubh Jewellers Net Exposure*\n${lines.join('\n')}`;
+    }
+
+    if (res.parsed.intent === 'QUERY_RATE') {
+      return this.formatRatesReply('GROUP_A', res.parsed.metal, res.parsed.settlement);
+    }
+
+    if (res.executed) {
+      return `✅ *Owner Desk Updated*\n${res.message}`;
+    }
+    return `⚠️ Could not process command: ${res.message}\nTry: "Silver cash +100", "Freeze", "Position"`;
+  }
+
   private handleOwnerMessage(phone: string, text: string): string {
     const res = this.ai.executeCommand(text, `wa-owner-${phone}`, {
       role: 'DEALER',
@@ -113,6 +168,87 @@ export class WhatsAppAgentService {
       return `✅ *Owner Desk Updated*\n${res.message}`;
     }
     return `⚠️ Could not process command: ${res.message}\nTry: "Silver cash +100", "Freeze", "Position"`;
+  }
+
+  private async handleSubDealerMessageAsync(phone: string, clientId: string, text: string): Promise<string> {
+    const lower = text.toLowerCase().trim();
+    const pendingOrderId = this.pendingConfirmOrderByPhone.get(phone);
+
+    if (pendingOrderId && /^(haa|ha|yes|y|confirm|ok|done|pakka)$/i.test(lower)) {
+      try {
+        const confirmed = this.market.confirmOrder(pendingOrderId);
+        this.pendingConfirmOrderByPhone.delete(phone);
+        return `✅ *Sauda Confirmed! Deal #${confirmed.dealNumber}*\n${confirmed.side} ${confirmed.qtyUnits} × ${confirmed.scripCode}\nRate: ₹${confirmed.quotedRate.toLocaleString('en-IN')}\nTotal: ₹${confirmed.totalInr.toLocaleString('en-IN')}`;
+      } catch (err) {
+        this.pendingConfirmOrderByPhone.delete(phone);
+        return `❌ Confirmation failed: ${(err as Error).message}`;
+      }
+    }
+
+    if (pendingOrderId && /^(nahi|na|no|n|cancel|ruk)$/i.test(lower)) {
+      this.market.cancelOrder(pendingOrderId);
+      this.pendingConfirmOrderByPhone.delete(phone);
+      return `🚫 Pending deal cancelled.`;
+    }
+
+    const client = this.market.getClient(clientId)!;
+
+    if (/\b(hisab|balance|ledger|khata)\b/i.test(lower)) {
+      return (
+        `📒 *Dual Ledger — ${client.firmName}*\n` +
+        `• Cash Balance: ₹${client.cashBalanceInr.toLocaleString('en-IN')}\n` +
+        `• Fine Gold (999): ${client.metalBalanceGoldGrams.toFixed(2)} g\n` +
+        `• Fine Silver (999): ${(client.metalBalanceSilverGrams / 1000).toFixed(3)} kg`
+      );
+    }
+
+    const res = await this.ai.executeCommandAsync(text, `wa-client-${phone}`, {
+      role: 'CLIENT',
+      clientId,
+      autoExecute: false,
+      source: 'WHATSAPP',
+    });
+
+    if (res.parsed.intent === 'QUERY_RATE') {
+      return this.formatRatesReply(client.clientGroup, res.parsed.metal, res.parsed.settlement);
+    }
+
+    if (res.parsed.intent === 'PLACE_ORDER') {
+      try {
+        const execRes = await this.ai.executeCommandAsync(text, `wa-client-${phone}`, {
+          role: 'CLIENT',
+          clientId,
+          autoExecute: true,
+          source: 'WHATSAPP',
+        });
+        if (execRes.order) {
+          if (execRes.order.status === 'PENDING_CONFIRM') {
+            this.pendingConfirmOrderByPhone.set(phone, execRes.order.id);
+            return (
+              `⏳ *Deal #${execRes.order.dealNumber} — Reply HAA within 15s to Confirm*\n` +
+              `${execRes.order.side} ${execRes.order.qtyUnits} × ${execRes.order.scripCode}\n` +
+              `Rate: ₹${execRes.order.quotedRate.toLocaleString('en-IN')}\n` +
+              `Total: ₹${execRes.order.totalInr.toLocaleString('en-IN')} (GST ₹${execRes.order.gstAmount.toLocaleString('en-IN')})\n\n` +
+              `Reply *HAA* to confirm or *NAHI* to cancel.`
+            );
+          }
+          return `📌 *Limit Order Placed! Deal #${execRes.order.dealNumber}*\n${execRes.message}`;
+        }
+      } catch (err) {
+        return `❌ Order rejected: ${(err as Error).message}`;
+      }
+    }
+
+    if (res.parsed.intent === 'UNKNOWN' && res.parsed.explanation && !res.parsed.explanation.startsWith('Could not')) {
+      return `🤔 ${res.parsed.explanation}`;
+    }
+
+    return (
+      `🙏 Namaste ${client.name}!\n` +
+      `• Check rates: *"rate kya hai"* or *"bhav batao"*\n` +
+      `• Book order: *"2 peti chandi pakki kar do"* or *"10g gold 999 rtgs"*\n` +
+      `• Check ledger: *"mera hisab"*`
+    );
   }
 
   private handleSubDealerMessage(phone: string, clientId: string, text: string): string {

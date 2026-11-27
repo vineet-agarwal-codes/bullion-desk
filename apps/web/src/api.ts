@@ -108,6 +108,11 @@ export const api = {
       message: string;
       order?: Order;
     }>('/api/ai/command', { method: 'POST', body: JSON.stringify(payload) }),
+  transcribeAudio: (audioBase64: string, mimeType: string = 'audio/webm') =>
+    request<{ transcript: string; provider: string }>('/api/ai/transcribe', {
+      method: 'POST',
+      body: JSON.stringify({ audioBase64, mimeType }),
+    }),
   simulateWhatsApp: (phone: string, text: string) =>
     request<{ reply: string; role: 'OWNER' | 'SUB_DEALER' | 'PUBLIC' }>('/api/whatsapp/simulate', {
       method: 'POST',

@@ -28,6 +28,7 @@ export function VoiceCommandBar({
 }: Props) {
   const [text, setText] = useState('');
   const [listening, setListening] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
   const [preview, setPreview] = useState<{
     originalText: string;
     intent: string;
@@ -41,6 +42,8 @@ export function VoiceCommandBar({
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const previewCommand = async (cmdText: string) => {
@@ -123,7 +126,69 @@ export function VoiceCommandBar({
     }
   };
 
-  const toggleMic = () => {
+  const toggleMic = async () => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      setListening(false);
+      return;
+    }
+
+    setPreview(null);
+    setResult(null);
+
+    // 1. Start MediaRecorder for high-accuracy server-side Hinglish Audio STT (Agy Multimodal)
+    if (navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined') {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunksRef.current = [];
+        const recorder = new MediaRecorder(stream);
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) audioChunksRef.current.push(e.data);
+        };
+        recorder.onstop = async () => {
+          stream.getTracks().forEach((t) => t.stop());
+          const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+          if (blob.size < 500) return;
+          setTranscribing(true);
+          try {
+            const reader = new FileReader();
+            const base64: string = await new Promise((resolve, reject) => {
+              reader.onloadend = () => {
+                const res = String(reader.result ?? '');
+                resolve(res.split(',')[1] ?? '');
+              };
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+            if (base64) {
+              const stt = await api.transcribeAudio(base64, blob.type || 'audio/webm');
+              if (stt.transcript) {
+                setText(transliterateDevanagariToHinglish(stt.transcript));
+              }
+            }
+          } catch {
+            // Keep browser live transcript if server STT fails
+          } finally {
+            setTranscribing(false);
+          }
+        };
+        mediaRecorderRef.current = recorder;
+        recorder.start();
+        setListening(true);
+      } catch {
+        setResult({
+          message: 'Microphone permission denied or unavailable.',
+          usedContext: false,
+          executed: false,
+        });
+        return;
+      }
+    }
+
+    // 2. Also run browser SpeechRecognition for instant live typing feedback while speaking
     const SpeechRec =
       (
         window as unknown as {
@@ -133,52 +198,35 @@ export function VoiceCommandBar({
       ).SpeechRecognition ??
       (window as unknown as { webkitSpeechRecognition?: new () => unknown }).webkitSpeechRecognition;
 
-    if (!SpeechRec) {
-      setResult({
-        message: 'Browser microphone SpeechRecognition unavailable; type Hinglish command below.',
-        usedContext: false,
-        executed: false,
-      });
-      return;
+    if (SpeechRec) {
+      const rec = new SpeechRec() as {
+        lang: string;
+        interimResults: boolean;
+        continuous: boolean;
+        onresult: (e: {
+          results: ArrayLike<ArrayLike<{ transcript: string }>>;
+        }) => void;
+        onerror: () => void;
+        onend: () => void;
+        start: () => void;
+        stop: () => void;
+      };
+      rec.lang = 'hi-IN';
+      rec.interimResults = true;
+      rec.continuous = true;
+      rec.onresult = (e) => {
+        const parts: string[] = [];
+        for (let i = 0; i < e.results.length; i++) {
+          const chunk = e.results[i]?.[0]?.transcript?.trim();
+          if (chunk) parts.push(chunk);
+        }
+        setText(transliterateDevanagariToHinglish(parts.join(' ')));
+      };
+      rec.onerror = () => {};
+      rec.onend = () => {};
+      recognitionRef.current = rec;
+      rec.start();
     }
-
-    if (listening && recognitionRef.current) {
-      recognitionRef.current.stop();
-      setListening(false);
-      return;
-    }
-
-    const rec = new SpeechRec() as {
-      lang: string;
-      interimResults: boolean;
-      continuous: boolean;
-      onresult: (e: {
-        results: ArrayLike<ArrayLike<{ transcript: string }>>;
-      }) => void;
-      onerror: () => void;
-      onend: () => void;
-      start: () => void;
-      stop: () => void;
-    };
-    rec.lang = 'hi-IN';
-    rec.interimResults = true;
-    rec.continuous = true;
-    rec.onresult = (e) => {
-      const parts: string[] = [];
-      for (let i = 0; i < e.results.length; i++) {
-        const chunk = e.results[i]?.[0]?.transcript?.trim();
-        if (chunk) parts.push(chunk);
-      }
-      // Transliterate any Devanagari output into clean Hinglish and type into input box
-      const hinglish = transliterateDevanagariToHinglish(parts.join(' '));
-      setText(hinglish);
-    };
-    rec.onerror = () => setListening(false);
-    rec.onend = () => setListening(false);
-    recognitionRef.current = rec;
-    setPreview(null);
-    setListening(true);
-    rec.start();
   };
 
   return (
@@ -196,7 +244,11 @@ export function VoiceCommandBar({
           </span>
         </div>
         <span className="text-[11px] text-slate-400">
-          {listening ? 'Listening... (click mic to stop)' : `Session: ${sessionId}`}
+          {listening
+            ? 'Recording... (click mic to stop)'
+            : transcribing
+              ? 'Refining Hinglish via AI Audio STT...'
+              : `Session: ${sessionId}`}
         </span>
       </div>
 

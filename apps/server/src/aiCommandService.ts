@@ -7,6 +7,8 @@ import {
   type SettlementType,
 } from '@bullion-desk/shared';
 import type { MarketService } from './marketService.js';
+import { executeMcpTool } from './mcpTools.js';
+import { parseIntentWithAgy } from './llmRouter.js';
 
 export interface AiSessionContext {
   lastMetal?: MetalType;
@@ -319,6 +321,64 @@ export class AiCommandService {
   ): AiCommandResponse {
     const role = options.role ?? 'DEALER';
     const parsed = this.parseCommand(rawText, sessionId, role);
+    return this.applyParsedCommand(rawText, parsed, sessionId, options);
+  }
+
+  async executeCommandAsync(
+    rawText: string,
+    sessionId: string,
+    options: {
+      role?: 'DEALER' | 'CLIENT';
+      clientId?: string;
+      autoExecute?: boolean;
+      source?: 'WEB' | 'WHATSAPP' | 'VOICE';
+    } = {}
+  ): Promise<AiCommandResponse> {
+    const role = options.role ?? 'DEALER';
+    const ctx = this.getContext(sessionId);
+    const llmOut = await parseIntentWithAgy(rawText, role, this.market.listScrips(), ctx);
+    const parsed: AiParsedCommand =
+      llmOut && llmOut.intent !== 'CLARIFY'
+        ? {
+            intent: llmOut.intent,
+            confidence: llmOut.confidence,
+            metal: llmOut.metal,
+            settlement: llmOut.settlement,
+            purity: llmOut.purity,
+            targetScripIds: llmOut.targetScripIds,
+            delta: llmOut.delta,
+            value: llmOut.value,
+            side: llmOut.side,
+            qtyUnits: llmOut.qtyUnits,
+            limitRate: llmOut.limitRate,
+            explanation: llmOut.explanation,
+            usedContext: llmOut.usedContext,
+          }
+        : llmOut?.intent === 'CLARIFY'
+          ? {
+              intent: 'UNKNOWN',
+              confidence: llmOut.confidence,
+              targetScripIds: [],
+              explanation: llmOut.clarificationQuestion ?? llmOut.explanation,
+              usedContext: llmOut.usedContext,
+            }
+          : this.parseCommand(rawText, sessionId, role);
+
+    return this.applyParsedCommand(rawText, parsed, sessionId, options);
+  }
+
+  private applyParsedCommand(
+    _rawText: string,
+    parsed: AiParsedCommand,
+    sessionId: string,
+    options: {
+      role?: 'DEALER' | 'CLIENT';
+      clientId?: string;
+      autoExecute?: boolean;
+      source?: 'WEB' | 'WHATSAPP' | 'VOICE';
+    } = {}
+  ): AiCommandResponse {
+    const role = options.role ?? 'DEALER';
 
     // Update session context if metal/settlement/scrip resolved
     const prevCtx = this.getContext(sessionId);
@@ -340,9 +400,15 @@ export class AiCommandService {
       };
     }
 
+    const mcpUser = {
+      role: role === 'DEALER' ? ('ADMIN' as const) : ('SUB_DEALER' as const),
+      clientId: options.clientId ?? 'client-mehra',
+      clientGroup: 'GROUP_B' as const,
+    };
+
     switch (parsed.intent) {
       case 'FREEZE_MARKET': {
-        this.market.setFreeze(true, 'Voice/AI Command Freeze');
+        executeMcpTool(this.market, 'toggle_market_freeze', { isFrozen: true, reason: 'Voice/AI Command Freeze' }, mcpUser, options.source ?? 'VOICE');
         return {
           parsed,
           executed: true,
@@ -351,7 +417,7 @@ export class AiCommandService {
         };
       }
       case 'UNFREEZE_MARKET': {
-        this.market.setFreeze(false, '');
+        executeMcpTool(this.market, 'toggle_market_freeze', { isFrozen: false, reason: '' }, mcpUser, options.source ?? 'VOICE');
         return {
           parsed,
           executed: true,
@@ -360,15 +426,17 @@ export class AiCommandService {
         };
       }
       case 'ADJUST_OFFSET': {
-        const updatedScrips: ScripConfig[] = [];
-        for (const id of parsed.targetScripIds) {
-          const s = this.market.getScrip(id);
-          if (s && parsed.delta !== undefined) {
-            updatedScrips.push(
-              this.market.updateScrip(id, { manualOffset: s.manualOffset + parsed.delta })
-            );
-          }
+        if (parsed.targetScripIds.length === 0 || parsed.delta === undefined) {
+          return { parsed, executed: false, message: 'No matching scrips found to adjust.', context: nextCtx };
         }
+        const res = executeMcpTool(
+          this.market,
+          'adjust_scrip_offset',
+          { scripIds: parsed.targetScripIds, delta: parsed.delta },
+          mcpUser,
+          options.source ?? 'VOICE'
+        );
+        const updatedScrips = res.result as ScripConfig[];
         return {
           parsed,
           executed: updatedScrips.length > 0,
@@ -396,12 +464,17 @@ export class AiCommandService {
         };
       }
       case 'SET_SPREAD': {
-        const updatedScrips: ScripConfig[] = [];
-        for (const id of parsed.targetScripIds) {
-          if (parsed.value !== undefined) {
-            updatedScrips.push(this.market.updateScrip(id, { bidSpread: parsed.value }));
-          }
+        if (parsed.targetScripIds.length === 0 || parsed.value === undefined) {
+          return { parsed, executed: false, message: 'No matching scrips found to set spread.', context: nextCtx };
         }
+        const res = executeMcpTool(
+          this.market,
+          'set_scrip_spread',
+          { scripIds: parsed.targetScripIds, bidSpread: parsed.value },
+          mcpUser,
+          options.source ?? 'VOICE'
+        );
+        const updatedScrips = res.result as ScripConfig[];
         return {
           parsed,
           executed: updatedScrips.length > 0,
@@ -411,7 +484,6 @@ export class AiCommandService {
         };
       }
       case 'PLACE_ORDER': {
-        const clientId = options.clientId ?? 'client-mehra';
         const scripId = parsed.targetScripIds[0];
         if (!scripId) {
           return {
@@ -421,15 +493,21 @@ export class AiCommandService {
             context: nextCtx,
           };
         }
-        const order = this.market.createOrder({
-          clientId,
-          scripId,
-          side: parsed.side ?? 'BUY',
-          orderType: parsed.limitRate ? 'LIMIT' : 'MARKET',
-          qtyUnits: parsed.qtyUnits ?? 1,
-          limitRate: parsed.limitRate,
-          source: options.source ?? 'VOICE',
-        });
+        const res = executeMcpTool(
+          this.market,
+          'place_order',
+          {
+            clientId: options.clientId ?? 'client-mehra',
+            scripId,
+            side: parsed.side ?? 'BUY',
+            orderType: parsed.limitRate ? 'LIMIT' : 'MARKET',
+            qtyUnits: parsed.qtyUnits ?? 1,
+            limitRate: parsed.limitRate,
+          },
+          mcpUser,
+          options.source ?? 'VOICE'
+        );
+        const order = res.result as Order;
         return {
           parsed,
           executed: true,
