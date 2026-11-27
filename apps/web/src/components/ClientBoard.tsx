@@ -43,7 +43,9 @@ export function ClientBoard({
   const [submitting, setSubmitting] = useState(false);
 
   const selectedClient = clients.find((c) => c.id === selectedClientId) ?? clients[0];
-  const clientOrders = orders.filter((o) => o.clientId === selectedClient?.id);
+  const clientOrders = orders.filter(
+    (o) => o.clientId === selectedClient?.id && o.status !== 'CANCELLED'
+  );
   const pendingOrders = clientOrders.filter((o) => o.status === 'PENDING_CONFIRM');
   const latestPendingOrder = pendingOrders[0] ?? null;
 
