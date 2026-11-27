@@ -256,26 +256,30 @@ export function VoiceCommandBar({
   return (
     <div
       data-testid={`voice-bar-${role.toLowerCase()}`}
-      className="rounded-xl border border-amber-500/30 bg-gradient-to-r from-slate-900 via-slate-900 to-amber-950/20 p-4 space-y-3"
+      className="rounded-xl border border-amber-500/30 bg-gradient-to-r from-slate-900 via-slate-900 to-amber-950/20 p-3 sm:p-4 space-y-2.5 sm:space-y-3 overflow-hidden"
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-400">
-          <Sparkles className="h-4 w-4" />
+      <div className="flex flex-wrap items-center justify-between gap-1.5">
+        <div className="flex items-center gap-1.5 text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-amber-400">
+          <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
           <span>
             {role === 'DEALER'
-              ? 'AI Voice & Hinglish Desk Command (Context-Aware)'
-              : 'AI Hinglish Voice Sauda & Rate Assistant'}
+              ? 'AI Voice & Hinglish Desk'
+              : 'AI Voice Sauda & Rate Assistant'}
           </span>
         </div>
-        <span className="text-[11px] text-slate-400">
-          {listening
-            ? 'Recording... (click mic to stop)'
-            : transcribing
-              ? 'Refining Hinglish via AI Audio STT...'
-              : loading
-                ? 'Processing with AI Agent...'
-                : `Session: ${sessionId}`}
-        </span>
+        {(listening || transcribing || loading) ? (
+          <span className="text-[11px] text-amber-300 font-medium">
+            {listening
+              ? 'Recording... (tap mic to stop)'
+              : transcribing
+                ? 'Refining Hinglish Audio...'
+                : 'Processing with AI Agent...'}
+          </span>
+        ) : (
+          <span className="hidden sm:inline text-[11px] text-slate-400">
+            Session: {sessionId}
+          </span>
+        )}
       </div>
 
       <form
@@ -283,13 +287,13 @@ export function VoiceCommandBar({
           e.preventDefault();
           previewCommand(text);
         }}
-        className="flex gap-2"
+        className="flex items-center gap-1.5 sm:gap-2"
       >
         <button
           type="button"
           onClick={toggleMic}
           disabled={loading || transcribing}
-          className={`flex items-center justify-center rounded-lg px-3 py-2 transition disabled:opacity-50 ${
+          className={`shrink-0 flex items-center justify-center rounded-lg px-2.5 sm:px-3 py-2.5 sm:py-2 transition disabled:opacity-50 ${
             listening
               ? 'bg-rose-500 text-white animate-pulse'
               : 'border border-slate-700 bg-slate-950 text-amber-400 hover:bg-slate-800'
@@ -308,24 +312,24 @@ export function VoiceCommandBar({
           onChange={(e) => setText(e.target.value)}
           placeholder={
             role === 'DEALER'
-              ? 'Speak or type: "Silver cash 100 badha do" then click Execute'
-              : 'Speak or type: "bhav kya chal raha hai" or "2 peti chandi pakki kar do"'
+              ? 'e.g. "Silver cash 100 badha do"'
+              : 'e.g. "bhav kya hai" or "2 peti chandi"'
           }
-          className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none disabled:opacity-60"
+          className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-2.5 sm:px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none disabled:opacity-60"
         />
 
         <button
           data-testid={`voice-submit-${role.toLowerCase()}`}
           type="submit"
           disabled={isBusy || !text.trim()}
-          className="flex items-center gap-1.5 rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50"
+          className="shrink-0 flex items-center gap-1 sm:gap-1.5 rounded-lg bg-amber-500 px-3 sm:px-4 py-2.5 sm:py-2 text-xs font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50"
         >
           {loading || transcribing ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : (
             <Send className="h-3.5 w-3.5" />
           )}
-          {buttonLabel}
+          <span>{buttonLabel}</span>
         </button>
       </form>
 

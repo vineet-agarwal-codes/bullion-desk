@@ -191,44 +191,44 @@ export function ClientBoard({
       {selectedClient && (
         <div
           data-testid="khata-top-panel"
-          className="grid gap-3 sm:grid-cols-3 rounded-xl border border-amber-500/25 bg-slate-900/80 p-4"
+          className="grid grid-cols-3 gap-2 sm:gap-3 rounded-xl border border-amber-500/25 bg-slate-900/80 p-2.5 sm:p-4"
         >
-          <div className="flex items-center gap-3 rounded-lg bg-slate-950/80 px-4 py-3 border border-slate-800">
-            <Wallet className="h-5 w-5 text-emerald-400 shrink-0" />
-            <div>
-              <div className="text-[11px] uppercase tracking-wider text-slate-400">
-                Khata Cash Balance
+          <div className="flex items-center gap-2 sm:gap-3 rounded-lg bg-slate-950/80 px-2.5 py-2 sm:px-4 sm:py-3 border border-slate-800 min-w-0">
+            <Wallet className="hidden sm:block h-5 w-5 text-emerald-400 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-[9px] sm:text-[11px] uppercase tracking-wider text-slate-400 truncate">
+                Khata Cash
               </div>
               <div
-                className="font-mono text-base font-bold text-slate-100"
+                className="font-mono text-xs sm:text-base font-bold text-slate-100 truncate"
                 data-testid="client-cash-balance"
               >
                 ₹{selectedClient.cashBalanceInr.toLocaleString('en-IN')}
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3 rounded-lg bg-slate-950/80 px-4 py-3 border border-slate-800">
-            <Coins className="h-5 w-5 text-amber-400 shrink-0" />
-            <div>
-              <div className="text-[11px] uppercase tracking-wider text-slate-400">
-                Fine Gold (999)
+          <div className="flex items-center gap-2 sm:gap-3 rounded-lg bg-slate-950/80 px-2.5 py-2 sm:px-4 sm:py-3 border border-slate-800 min-w-0">
+            <Coins className="hidden sm:block h-5 w-5 text-amber-400 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-[9px] sm:text-[11px] uppercase tracking-wider text-slate-400 truncate">
+                Fine Gold
               </div>
               <div
-                className="font-mono text-base font-bold text-amber-400"
+                className="font-mono text-xs sm:text-base font-bold text-amber-400 truncate"
                 data-testid="client-gold-balance"
               >
                 {selectedClient.metalBalanceGoldGrams.toFixed(2)} g
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3 rounded-lg bg-slate-950/80 px-4 py-3 border border-slate-800">
-            <Coins className="h-5 w-5 text-slate-300 shrink-0" />
-            <div>
-              <div className="text-[11px] uppercase tracking-wider text-slate-400">
-                Fine Silver (999)
+          <div className="flex items-center gap-2 sm:gap-3 rounded-lg bg-slate-950/80 px-2.5 py-2 sm:px-4 sm:py-3 border border-slate-800 min-w-0">
+            <Coins className="hidden sm:block h-5 w-5 text-slate-300 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-[9px] sm:text-[11px] uppercase tracking-wider text-slate-400 truncate">
+                Fine Silver
               </div>
               <div
-                className="font-mono text-base font-bold text-slate-200"
+                className="font-mono text-xs sm:text-base font-bold text-slate-200 truncate"
                 data-testid="client-silver-balance"
               >
                 {(selectedClient.metalBalanceSilverGrams / 1000).toFixed(3)} kg
@@ -239,17 +239,17 @@ export function ClientBoard({
       )}
 
       {/* Client Context & Settlement Tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-xs font-medium uppercase tracking-wider text-slate-400">
-            Sub-Dealer Account:
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <span className="text-[11px] sm:text-xs font-medium uppercase tracking-wider text-slate-400">
+            Account:
           </span>
           {user.role === 'ADMIN' ? (
             <select
               data-testid="client-selector"
               value={selectedClient?.id ?? ''}
               onChange={(e) => onSelectClient(e.target.value)}
-              className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm font-medium text-slate-100 focus:border-amber-500 focus:outline-none"
+              className="flex-1 sm:flex-none rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-100 focus:border-amber-500 focus:outline-none"
             >
               {clients.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -260,26 +260,31 @@ export function ClientBoard({
           ) : (
             <span
               data-testid="logged-in-firm"
-              className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-sm font-semibold text-emerald-300"
+              className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs sm:text-sm font-semibold text-emerald-300"
             >
               {user.displayName}
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-1 rounded-lg bg-slate-950 p-1 border border-slate-800">
+        <div className="flex w-full sm:w-auto items-center gap-1 rounded-lg bg-slate-950 p-1 border border-slate-800">
           {(['ALL', 'RTGS', 'CASH'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setSettlementFilter(tab)}
               data-testid={`filter-${tab.toLowerCase()}`}
-              className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+              className={`flex-1 sm:flex-none whitespace-nowrap rounded-md px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-semibold transition ${
                 settlementFilter === tab
                   ? 'bg-amber-500 text-slate-950'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              {tab === 'ALL' ? 'All Boards' : tab === 'RTGS' ? 'RTGS (Pakka +3% GST)' : 'Cash / Badla'}
+              <span className="sm:hidden">
+                {tab === 'ALL' ? 'All' : tab === 'RTGS' ? 'RTGS (+3%)' : 'Cash / Badla'}
+              </span>
+              <span className="hidden sm:inline">
+                {tab === 'ALL' ? 'All Boards' : tab === 'RTGS' ? 'RTGS (Pakka +3% GST)' : 'Cash / Badla'}
+              </span>
             </button>
           ))}
         </div>
@@ -391,8 +396,73 @@ export function ClientBoard({
         </div>
       )}
 
-      {/* Live Rate Board */}
-      <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60 shadow-xl">
+      {/* Mobile Rate Board Cards (Zero horizontal scroll, thumb-friendly Buy/Sell) */}
+      <div className="md:hidden space-y-2.5">
+        {filteredQuotes.map((q) => (
+          <div
+            key={q.scripId}
+            data-testid={`rate-card-${q.scripId}`}
+            className="rounded-xl border border-slate-800 bg-slate-900/70 p-3.5 space-y-3"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <Coins
+                  className={`h-4 w-4 shrink-0 ${q.metal === 'GOLD' ? 'text-amber-400' : 'text-slate-300'}`}
+                />
+                <div className="min-w-0">
+                  <div className="font-semibold text-sm text-slate-100 leading-tight">{q.name}</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Purity {q.purity} • {q.unit} • MCX ₹{q.mcxBase.toLocaleString('en-IN')}
+                  </div>
+                </div>
+              </div>
+              <span
+                className={`shrink-0 inline-flex rounded px-2 py-0.5 text-[10px] font-semibold ${
+                  q.settlement === 'RTGS'
+                    ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30'
+                    : 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
+                }`}
+              >
+                {q.settlement} {q.gstPercent > 0 ? `+${q.gstPercent}%` : '0%'}
+              </span>
+            </div>
+
+            {isFrozen ? (
+              <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 py-2 text-center font-mono text-xs font-semibold text-rose-400">
+                MARKET FROZEN — CALL FOR RATE
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => openTicket(q, 'SELL')}
+                  className="flex flex-col items-center justify-center rounded-lg border border-rose-500/35 bg-rose-500/10 px-3 py-2 active:scale-[0.98] transition"
+                >
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-rose-400">
+                    Sell (Bid)
+                  </span>
+                  <span className="font-mono text-sm font-bold text-rose-200">
+                    ₹{q.buyRate.toLocaleString('en-IN')}
+                  </span>
+                </button>
+                <button
+                  onClick={() => openTicket(q, 'BUY')}
+                  className="flex flex-col items-center justify-center rounded-lg border border-emerald-500/35 bg-emerald-500/10 px-3 py-2 active:scale-[0.98] transition"
+                >
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
+                    Buy (Ask)
+                  </span>
+                  <span className="font-mono text-sm font-bold text-emerald-200">
+                    ₹{q.sellRate.toLocaleString('en-IN')}
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop Live Rate Board */}
+      <div className="hidden md:block overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60 shadow-xl">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-slate-800 bg-slate-900 text-xs uppercase tracking-wider text-slate-400">
@@ -469,10 +539,10 @@ export function ClientBoard({
 
       {/* Order Ticket Modal */}
       {ticket && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4">
           <div
             data-testid="order-ticket-modal"
-            className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl space-y-4"
+            className="w-full max-w-md rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-slate-900 p-5 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>

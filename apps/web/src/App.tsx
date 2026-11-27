@@ -124,7 +124,7 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen bg-slate-950 text-slate-100 overflow-x-hidden">
       {/* Header */}
       <header className="border-b border-slate-800 bg-slate-950/95 px-4 py-3">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4">

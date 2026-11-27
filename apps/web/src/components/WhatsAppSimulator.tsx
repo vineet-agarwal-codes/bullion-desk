@@ -205,14 +205,14 @@ export function WhatsAppSimulator({ user, clients, onOrderOrRateChanged }: Props
               type="text"
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Type WhatsApp message (e.g. 'rate kya hai' or '2 peti chandi pakki kar do')..."
-              className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+              placeholder="Type message (e.g. 'rate kya hai')..."
+              className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
             />
             <button
               data-testid="wa-send-btn"
               type="submit"
               disabled={isSendingCurrent || !text.trim()}
-              className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
+              className="shrink-0 flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 sm:px-4 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
             >
               <Send className="h-3.5 w-3.5" />
               {isSendingCurrent ? 'Sending...' : 'Send'}
