@@ -266,7 +266,7 @@ export class MarketService {
 
     const status: Order['status'] =
       input.orderType === 'MARKET' || isLimitMarketable ? 'PENDING_CONFIRM' : 'PENDING_LIMIT';
-    const expiresAt = status === 'PENDING_CONFIRM' ? now + 15_000 : null;
+    const expiresAt = status === 'PENDING_CONFIRM' ? now + 60_000 : null;
 
     const txn = this.db.transaction(() => {
       const dealRow = this.db

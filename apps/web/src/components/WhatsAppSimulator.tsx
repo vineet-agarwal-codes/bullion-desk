@@ -111,7 +111,7 @@ export function WhatsAppSimulator({ user, clients, onOrderOrRateChanged }: Props
             </div>
             <div>
               <div className="text-sm font-bold text-slate-100">
-                BullionDesk Bot ({isOwner ? 'Owner Mode' : 'Sub-Dealer Mode'})
+                Shubh Jewellers Bot ({isOwner ? 'Owner Mode' : 'Sub-Dealer Mode'})
               </div>
               <div className="text-[11px] text-emerald-400">
                 Active Webhook: {selectedPhone}

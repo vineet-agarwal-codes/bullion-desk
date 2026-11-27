@@ -79,6 +79,8 @@ const HINGLISH_NUMBERS: Record<string, number> = {
 
 function normalizeHinglishText(raw: string): string {
   let text = raw.toLowerCase().trim();
+  // Protect Hindi verb endings "kar do" / "karde" before converting "do" -> 2
+  text = text.replace(/\bkar\s+do\b/g, 'karo').replace(/\bkarde\b/g, 'karo');
   for (const [word, num] of Object.entries(HINGLISH_NUMBERS)) {
     const regex = new RegExp(`\\b${word}\\b`, 'gi');
     text = text.replace(regex, String(num));
@@ -142,7 +144,7 @@ export class AiCommandService {
     else if (/\b(silver|chandi|safed|peti|chorsa|payal)\b/.test(text)) metal = 'SILVER';
 
     let settlement: SettlementType | undefined;
-    if (/\b(rtgs|pakka|pukka|gst|bill)\b/.test(text)) settlement = 'RTGS';
+    if (/\b(rtgs|gst|bill)\b/.test(text) || /\bpakka\s+bill\b/.test(text)) settlement = 'RTGS';
     else if (/\b(cash|kaccha|kachha|badla|rokda)\b/.test(text)) settlement = 'CASH';
 
     let purity: number | undefined;

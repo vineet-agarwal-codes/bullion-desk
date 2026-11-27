@@ -134,7 +134,7 @@ export function App() {
             </div>
             <div>
               <h1 className="text-base font-bold tracking-tight text-slate-100">
-                BullionDesk <span className="text-xs font-normal text-amber-400">v0.5</span>
+                Shubh Jewellers <span className="text-xs font-normal text-amber-400">v0.5</span>
               </h1>
               <p className="text-[11px] text-slate-400">
                 {user.displayName} •{' '}

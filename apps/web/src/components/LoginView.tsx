@@ -42,7 +42,7 @@ export function LoginView({ onLogin }: Props) {
             <Crown className="h-6 w-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-100">BullionDesk</h1>
+            <h1 className="text-xl font-bold text-slate-100">Shubh Jewellers</h1>
             <p className="text-xs text-slate-400">
               RBAC-Secured Wholesale Bullion Trading OS
             </p>

@@ -39,11 +39,13 @@ export function ClientBoard({
   const [orderType, setOrderType] = useState<OrderType>('MARKET');
   const [qtyUnits, setQtyUnits] = useState<number>(1);
   const [limitRate, setLimitRate] = useState<string>('');
-  const [pendingOrder, setPendingOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const selectedClient = clients.find((c) => c.id === selectedClientId) ?? clients[0];
+  const clientOrders = orders.filter((o) => o.clientId === selectedClient?.id);
+  const pendingOrders = clientOrders.filter((o) => o.status === 'PENDING_CONFIRM');
+  const latestPendingOrder = pendingOrders[0] ?? null;
 
   const filteredQuotes = quotes.filter(
     (q) => q.isActive && (settlementFilter === 'ALL' || q.settlement === settlementFilter)
@@ -73,9 +75,6 @@ export function ClientBoard({
         source: 'WEB',
       });
       setTicket(null);
-      if (order.status === 'PENDING_CONFIRM') {
-        setPendingOrder(order);
-      }
       onOrderChanged();
     } catch (err) {
       setError((err as Error).message);
@@ -88,7 +87,6 @@ export function ClientBoard({
     setError(null);
     try {
       await api.confirmOrder(orderId);
-      setPendingOrder(null);
       onOrderChanged();
     } catch (err) {
       setError((err as Error).message);
@@ -98,14 +96,11 @@ export function ClientBoard({
   const handleCancel = async (orderId: string) => {
     try {
       await api.cancelOrder(orderId);
-      setPendingOrder(null);
       onOrderChanged();
     } catch (err) {
       setError((err as Error).message);
     }
   };
-
-  const clientOrders = orders.filter((o) => o.clientId === selectedClient?.id);
 
   return (
     <div className="space-y-6">
@@ -167,7 +162,7 @@ export function ClientBoard({
       </div>
 
       {/* Pending Deal Confirmation Banner */}
-      {pendingOrder && (
+      {latestPendingOrder && (
         <div
           data-testid="pending-confirm-banner"
           className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-amber-500/50 bg-amber-500/10 p-4"
@@ -176,20 +171,20 @@ export function ClientBoard({
             <Clock className="h-6 w-6 text-amber-400 animate-pulse" />
             <div>
               <div className="font-semibold text-amber-200">
-                Deal #{pendingOrder.dealNumber} Pending Confirmation — {pendingOrder.side}{' '}
-                {pendingOrder.qtyUnits} × {pendingOrder.scripCode}
+                Deal #{latestPendingOrder.dealNumber} Pending Confirmation — {latestPendingOrder.side}{' '}
+                {latestPendingOrder.qtyUnits} × {latestPendingOrder.scripCode}
               </div>
               <div className="text-xs text-amber-300/80">
-                Locked Rate: ₹{pendingOrder.quotedRate.toLocaleString('en-IN')} | Total: ₹
-                {pendingOrder.totalInr.toLocaleString('en-IN')} (GST: ₹
-                {pendingOrder.gstAmount.toLocaleString('en-IN')})
+                Locked Rate: ₹{latestPendingOrder.quotedRate.toLocaleString('en-IN')} | Total: ₹
+                {latestPendingOrder.totalInr.toLocaleString('en-IN')} (GST: ₹
+                {latestPendingOrder.gstAmount.toLocaleString('en-IN')})
               </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button
               data-testid="confirm-deal-btn"
-              onClick={() => handleConfirm(pendingOrder.id)}
+              onClick={() => handleConfirm(latestPendingOrder.id)}
               className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-emerald-400"
             >
               <CheckCircle2 className="h-4 w-4" />
@@ -197,7 +192,7 @@ export function ClientBoard({
             </button>
             <button
               data-testid="cancel-deal-btn"
-              onClick={() => handleCancel(pendingOrder.id)}
+              onClick={() => handleCancel(latestPendingOrder.id)}
               className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800"
             >
               <XCircle className="h-4 w-4" />
@@ -469,21 +464,36 @@ export function ClientBoard({
                         {o.qtyUnits} × {o.scripCode}
                       </span>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       <span className="font-mono">₹{o.quotedRate.toLocaleString('en-IN')}</span>
-                      <span
-                        className={`rounded px-1.5 py-0.5 font-semibold ${
-                          o.status === 'CONFIRMED'
-                            ? 'bg-emerald-500/20 text-emerald-300'
-                            : o.status === 'PENDING_LIMIT'
-                              ? 'bg-sky-500/20 text-sky-300'
-                              : o.status === 'PENDING_CONFIRM'
-                                ? 'bg-amber-500/20 text-amber-300'
+                      {o.status === 'PENDING_CONFIRM' ? (
+                        <>
+                          <button
+                            onClick={() => handleConfirm(o.id)}
+                            className="rounded bg-emerald-500 px-2 py-0.5 font-bold text-slate-950 hover:bg-emerald-400"
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            onClick={() => handleCancel(o.id)}
+                            className="rounded bg-slate-800 px-2 py-0.5 text-slate-300 hover:bg-slate-700"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <span
+                          className={`rounded px-1.5 py-0.5 font-semibold ${
+                            o.status === 'CONFIRMED'
+                              ? 'bg-emerald-500/20 text-emerald-300'
+                              : o.status === 'PENDING_LIMIT'
+                                ? 'bg-sky-500/20 text-sky-300'
                                 : 'bg-slate-700 text-slate-400'
-                        }`}
-                      >
-                        {o.status}
-                      </span>
+                          }`}
+                        >
+                          {o.status}
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))
