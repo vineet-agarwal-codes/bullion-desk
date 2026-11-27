@@ -285,7 +285,7 @@ export class MarketService {
             ? 'PENDING_CONFIRM'
             : 'PROCESSING'
           : 'PENDING_LIMIT';
-      const expiresAt = status === 'PENDING_CONFIRM' ? now + 60_000 : null;
+      const expiresAt = status === 'PENDING_CONFIRM' ? now + 15_000 : null;
 
       const dealRow = this.db
         .prepare('SELECT value FROM market_settings WHERE key = ?')
@@ -347,6 +347,28 @@ export class MarketService {
       if (order.expiresAt && now > order.expiresAt) {
         this.db.prepare('UPDATE orders SET status = ? WHERE id = ?').run('EXPIRED', orderId);
         throw new Error('Deal confirmation window expired (15s timeout)');
+      }
+
+      if (order.status === 'PENDING_CONFIRM') {
+        const { isFrozen } = this.isFrozen();
+        if (isFrozen) {
+          this.db.prepare('UPDATE orders SET status = ? WHERE id = ?').run('CANCELLED', orderId);
+          throw new Error('Market was frozen by dealer before confirmation. Please request a fresh rate.');
+        }
+        const client = this.getClient(order.clientId);
+        const scrip = this.getScrip(order.scripId);
+        if (client && scrip) {
+          const quote = calculateScripQuote(this.feed.getTick(), scrip, client.clientGroup, false);
+          const currentRate = order.side === 'BUY' ? quote.sellRate : quote.buyRate;
+          const unitScale = scrip.unitGrams / (scrip.metal === 'GOLD' ? 10 : 1000);
+          const maxSlippage = Math.max(Math.round(150 * unitScale), Math.round(order.quotedRate * 0.002));
+          if (Math.abs(currentRate - order.quotedRate) > maxSlippage) {
+            this.db.prepare('UPDATE orders SET status = ? WHERE id = ?').run('EXPIRED', orderId);
+            throw new Error(
+              `Rate changed from ₹${order.quotedRate.toLocaleString('en-IN')} to ₹${currentRate.toLocaleString('en-IN')} before HAA confirmation. Please re-book at live rate.`
+            );
+          }
+        }
       }
 
       this.db

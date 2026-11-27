@@ -73,4 +73,30 @@ describe('WhatsApp Agents Integration (Sub-Dealer & Owner)', () => {
     const scrip = ctx.market.getScrip('silver-999-cash');
     expect(scrip?.manualOffset).toBe(550);
   });
+
+  it('rejects WhatsApp HAA confirmation if dealer changes price significantly before HAA', async () => {
+    const bookRes = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/whatsapp/simulate',
+      headers: adminHeaders,
+      payload: { phone: '+919811001122', text: '2 peti chandi pakki kar do' },
+    });
+    expect(bookRes.json().reply).toContain('Reply HAA within 15s');
+
+    // Dealer increases silver peti offset by +500/kg (= +15,000 per peti) before user replies HAA
+    await ctx.app.inject({
+      method: 'PATCH',
+      url: '/api/scrips/silver-999-peti-cash',
+      headers: adminHeaders,
+      payload: { manualOffset: 900 },
+    });
+
+    const confirmRes = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/whatsapp/simulate',
+      headers: adminHeaders,
+      payload: { phone: '+919811001122', text: 'HAA' },
+    });
+    expect(confirmRes.json().reply).toContain('Rate changed');
+  });
 });
