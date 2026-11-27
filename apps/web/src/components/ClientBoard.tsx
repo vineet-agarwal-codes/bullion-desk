@@ -9,7 +9,7 @@ import type {
   SettlementType,
 } from '@bullion-desk/shared';
 import { calculateOrderFinancials } from '@bullion-desk/shared';
-import { CheckCircle2, Clock, Coins, ShieldAlert, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, Coins, Pencil, ShieldAlert, XCircle } from 'lucide-react';
 import { api } from '../api';
 import { VoiceCommandBar } from './VoiceCommandBar';
 
@@ -35,7 +35,11 @@ export function ClientBoard({
   onOrderChanged,
 }: Props) {
   const [settlementFilter, setSettlementFilter] = useState<'ALL' | SettlementType>('ALL');
-  const [ticket, setTicket] = useState<{ quote: ScripQuote; side: OrderSide } | null>(null);
+  const [ticket, setTicket] = useState<{
+    quote: ScripQuote;
+    side: OrderSide;
+    editingOrderId?: string;
+  } | null>(null);
   const [orderType, setOrderType] = useState<OrderType>('MARKET');
   const [qtyUnits, setQtyUnits] = useState<number>(1);
   const [limitRate, setLimitRate] = useState<string>('');
@@ -62,12 +66,27 @@ export function ClientBoard({
     setError(null);
   };
 
+  const openEditTicket = (order: Order) => {
+    const quote = quotes.find((q) => q.scripId === order.scripId);
+    if (!quote || isFrozen) return;
+    setTicket({ quote, side: order.side, editingOrderId: order.id });
+    setOrderType(order.orderType);
+    setQtyUnits(order.qtyUnits);
+    setLimitRate(
+      String(order.limitRate ?? (order.side === 'BUY' ? quote.sellRate : quote.buyRate))
+    );
+    setError(null);
+  };
+
   const handlePlaceOrder = async () => {
     if (!ticket || !selectedClient) return;
     setSubmitting(true);
     setError(null);
     try {
-      const order = await api.createOrder({
+      if (ticket.editingOrderId) {
+        await api.cancelOrder(ticket.editingOrderId);
+      }
+      await api.createOrder({
         clientId: selectedClient.id,
         scripId: ticket.quote.scripId,
         side: ticket.side,
@@ -191,6 +210,14 @@ export function ClientBoard({
             >
               <CheckCircle2 className="h-4 w-4" />
               Confirm Sauda
+            </button>
+            <button
+              data-testid="edit-deal-btn"
+              onClick={() => openEditTicket(latestPendingOrder)}
+              className="flex items-center gap-1.5 rounded-lg border border-amber-500/50 bg-slate-900 px-3 py-2 text-sm font-medium text-amber-300 hover:bg-slate-800"
+            >
+              <Pencil className="h-4 w-4" />
+              Edit
             </button>
             <button
               data-testid="cancel-deal-btn"
@@ -406,7 +433,11 @@ export function ClientBoard({
                   : 'bg-rose-500 text-white hover:bg-rose-400'
               }`}
             >
-              {submitting ? 'Booking...' : `Book ${ticket.side} Order`}
+              {submitting
+                ? 'Booking...'
+                : ticket.editingOrderId
+                  ? `Update ${ticket.side} Order`
+                  : `Book ${ticket.side} Order`}
             </button>
           </div>
         </div>

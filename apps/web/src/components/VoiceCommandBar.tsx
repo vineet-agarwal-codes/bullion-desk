@@ -27,6 +27,7 @@ export function VoiceCommandBar({ role, sessionId, clientId, samples, onExecuted
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const previewCommand = async (cmdText: string) => {
     const trimmed = cmdText.trim();
@@ -186,6 +187,7 @@ export function VoiceCommandBar({ role, sessionId, clientId, samples, onExecuted
         </button>
 
         <input
+          ref={inputRef}
           data-testid={`voice-input-${role.toLowerCase()}`}
           type="text"
           value={text}
@@ -256,7 +258,10 @@ export function VoiceCommandBar({ role, sessionId, clientId, samples, onExecuted
             <button
               type="button"
               data-testid={`voice-cancel-${role.toLowerCase()}`}
-              onClick={() => setPreview(null)}
+              onClick={() => {
+                setPreview(null);
+                inputRef.current?.focus();
+              }}
               className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-slate-300 hover:bg-slate-800"
             >
               <XCircle className="h-3.5 w-3.5" />
